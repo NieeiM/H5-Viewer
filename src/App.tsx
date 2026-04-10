@@ -1,6 +1,6 @@
 import { App as H5WebApp } from '@h5web/app';
 import { useEventListener } from '@react-hookz/web';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import {
@@ -9,11 +9,31 @@ import {
   type Message,
   MessageType,
 } from '../extension/models';
-import AudioPanel from './audio/AudioPanel';
-import JsonPanel from './json/JsonPanel';
+import AudioViewer from './audio/AudioViewer';
+import JsonViewer from './json/JsonViewer';
 import { RpcClient } from './remote-api';
 import RemoteProvider from './RemoteProvider';
 import { vscode } from './vscode-api';
+
+// ---------------------------------------------------------------------------
+// View mode detection from dataset path
+// ---------------------------------------------------------------------------
+
+type ViewMode = 'h5web' | 'audio' | 'json';
+
+const AUDIO_EXT = /\.(mp3|wav|flac|ogg|aac|m4a|opus|wma)$/i;
+const JSON_EXT = /\.json$/i;
+
+function detectViewMode(path: string): ViewMode {
+  const name = path.split('/').pop() || '';
+  if (AUDIO_EXT.test(name)) return 'audio';
+  if (JSON_EXT.test(name)) return 'json';
+  return 'h5web';
+}
+
+// ---------------------------------------------------------------------------
+// Format labels
+// ---------------------------------------------------------------------------
 
 const FORMAT_LABELS: Record<string, string> = {
   'hdf5': 'HDF5',
@@ -32,7 +52,7 @@ function formatSize(bytes: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Loading screen component
+// Loading screen
 // ---------------------------------------------------------------------------
 
 function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
@@ -43,10 +63,7 @@ function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
   return (
     <div style={styles.loadingContainer}>
       <div style={styles.loadingCard}>
-        {/* Spinner */}
         <div style={styles.spinner} />
-
-        {/* File info */}
         {fileName && (
           <div style={styles.fileInfo}>
             <div style={styles.fileName}>{fileName}</div>
@@ -55,25 +72,14 @@ function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
             )}
           </div>
         )}
-
-        {/* Current step */}
         <div style={styles.stepText}>{message}</div>
-
-        {/* Progress bar */}
-        {progress && progress.percent >= 0 ? (
-          <div style={styles.progressBarOuter}>
-            <div
-              style={{
-                ...styles.progressBarInner,
-                width: `${progress.percent}%`,
-              }}
-            />
-          </div>
-        ) : (
-          <div style={styles.progressBarOuter}>
+        <div style={styles.progressBarOuter}>
+          {progress && progress.percent >= 0 ? (
+            <div style={{ ...styles.progressBarInner, width: `${progress.percent}%` }} />
+          ) : (
             <div style={styles.progressBarPulse} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -88,7 +94,11 @@ function App() {
   const [revision, setRevision] = useState(0);
   const [progress, setProgress] = useState<LoadingProgress | null>(null);
 
-  // Single RpcClient shared by RemoteProvider and AudioPanel
+  // Current view mode and active dataset path
+  const [viewMode, setViewMode] = useState<ViewMode>('h5web');
+  const [activePath, setActivePath] = useState('');
+
+  // Single RpcClient shared by all components
   const rpc = useMemo(() => new RpcClient(vscode), []);
 
   useEventListener(globalThis, 'message', (evt: MessageEvent<Message>) => {
@@ -109,12 +119,18 @@ function App() {
     vscode.postMessage({ type: MessageType.Ready });
   }, []);
 
-  // Still loading (no FileInfo yet) — show loading screen
+  // Callback fired by RemoteH5Api when @h5web/app requests a dataset value
+  const handlePathAccess = useCallback((path: string) => {
+    const mode = detectViewMode(path);
+    setViewMode(mode);
+    setActivePath(path);
+  }, []);
+
+  // Still loading
   if (!fileInfo) {
     return <LoadingScreen progress={progress} />;
   }
 
-  // Error message from extension (unsupported format, etc.)
   if (fileInfo.errorMessage) {
     return (
       <div style={styles.loadingContainer}>
@@ -130,9 +146,9 @@ function App() {
     return <div style={styles.loadingContainer}><p style={{ color: '#888' }}>File does not exist</p></div>;
   }
 
-  // Format badge for MAT v5/v7
   const formatLabel = fileInfo.format ? FORMAT_LABELS[fileInfo.format] : undefined;
   const isMatLegacy = fileInfo.format === 'mat-v5' || fileInfo.format === 'mat-v7';
+  const activeDatasetName = activePath.split('/').pop() || '';
 
   return (
     <ErrorBoundary
@@ -149,16 +165,41 @@ function App() {
           <code style={styles.code}> save('file.mat', '-v7.3')</code>
         </div>
       )}
+
       <div style={styles.mainLayout}>
-        <div style={styles.viewerArea}>
+        {/*
+          @h5web/app is always mounted (to preserve file tree state and selections),
+          but hidden when audio/json viewer is active.
+        */}
+        <div style={{
+          ...styles.viewerArea,
+          display: viewMode === 'h5web' ? 'block' : 'none',
+        }}>
           <Suspense fallback={<LoadingScreen progress={progress} />}>
-            <RemoteProvider key={revision} filepath={fileInfo.name} rpc={rpc}>
+            <RemoteProvider
+              key={revision}
+              filepath={fileInfo.name}
+              rpc={rpc}
+              onPathAccess={handlePathAccess}
+            >
               <H5WebApp />
             </RemoteProvider>
           </Suspense>
         </div>
-        <JsonPanel rpc={rpc} />
-        <AudioPanel rpc={rpc} />
+
+        {/* Audio viewer — shown when user clicks an audio dataset */}
+        {viewMode === 'audio' && activePath && (
+          <div style={styles.viewerArea}>
+            <AudioViewer rpc={rpc} path={activePath} name={activeDatasetName} />
+          </div>
+        )}
+
+        {/* JSON viewer — shown when user clicks a JSON dataset */}
+        {viewMode === 'json' && activePath && (
+          <div style={styles.viewerArea}>
+            <JsonViewer rpc={rpc} path={activePath} name={activeDatasetName} />
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );

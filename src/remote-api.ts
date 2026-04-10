@@ -177,13 +177,22 @@ interface Dataset {
   name: string;
 }
 
+export type PathAccessCallback = (path: string) => void;
+
 export class RemoteH5Api extends DataProviderApi {
+  private _onPathAccess: PathAccessCallback | null = null;
+
   constructor(
     filepath: string,
     private readonly rpc: RpcClient,
     private readonly vscodeApi: WebviewApi<unknown>,
   ) {
     super(filepath);
+  }
+
+  /** Register a callback that fires whenever a dataset value is requested (i.e. user selected it for visualization). */
+  set onPathAccess(cb: PathAccessCallback | null) {
+    this._onPathAccess = cb;
   }
 
   public override async getEntity(path: string): Promise<ProvidedEntity> {
@@ -195,6 +204,10 @@ export class RemoteH5Api extends DataProviderApi {
     _abortSignal?: AbortSignal,
   ): Promise<unknown> {
     const { dataset, selection } = params;
+
+    // Notify listener that a dataset is being accessed for visualization
+    this._onPathAccess?.(dataset.path);
+
     const raw = await this.rpc.call('getValue', {
       path: dataset.path,
       selection,
