@@ -39,7 +39,9 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 | 文件大小限制 | 2 GB | **无限制** |
 | 远程体验 | 慢 | 快 |
 
-## MATLAB .mat 文件支持
+## MATLAB .mat 文件支持（实验性）
+
+> **注意：** MAT 文件支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
 
 | MAT 版本 | 支持情况 | 说明 |
 |---|---|---|
@@ -49,7 +51,9 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 
 对于 MAT v5/v7 文件，界面顶部会显示提示横幅，说明文件已全量加载到内存。对于大文件，建议在 MATLAB 中用 `save('file.mat', '-v7.3')` 重新保存以获得更好的性能。
 
-## 脑电 .cnt 文件支持
+## 脑电 .cnt 文件支持（实验性）
+
+> **注意：** CNT 文件支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
 
 | 格式 | 支持情况 | 说明 |
 |---|---|---|

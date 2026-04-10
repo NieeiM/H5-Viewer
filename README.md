@@ -39,7 +39,9 @@ H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host
 | File size limit | 2 GB | **None** |
 | Remote experience | Slow | Fast |
 
-## MATLAB .mat File Support
+## MATLAB .mat File Support (Experimental)
+
+> **Note:** MAT file support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
 
 | MAT Version | Support | Notes |
 |---|---|---|
@@ -49,7 +51,9 @@ H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host
 
 For MAT v5/v7 files, a banner reminds you that the entire file is loaded into memory. For large files, resave in MATLAB with `save('file.mat', '-v7.3')` for better performance.
 
-## EEG .cnt File Support
+## EEG .cnt File Support (Experimental)
+
+> **Note:** CNT file support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
 
 | Format | Support | Notes |
 |---|---|---|
