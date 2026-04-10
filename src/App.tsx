@@ -10,6 +10,7 @@ import {
   MessageType,
 } from '../extension/models';
 import AudioPanel from './audio/AudioPanel';
+import JsonPanel from './json/JsonPanel';
 import { RpcClient } from './remote-api';
 import RemoteProvider from './RemoteProvider';
 import { vscode } from './vscode-api';
@@ -156,6 +157,7 @@ function App() {
             </RemoteProvider>
           </Suspense>
         </div>
+        <JsonPanel rpc={rpc} />
         <AudioPanel rpc={rpc} />
       </div>
     </ErrorBoundary>

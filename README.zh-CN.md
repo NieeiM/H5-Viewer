@@ -89,6 +89,18 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 
 功能：播放控制（播放/暂停、拖动、音量）、波形可视化（Canvas 2D）、频谱图可视化（FFT，使用 ooura 库）。大数据集加载前会显示警告。
 
+## NumPy .npy 支持（实验性）
+
+> **注意：** NPY 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
+
+以 `.npy` 扩展名命名的 dataset 会被自动识别为嵌入的 NumPy 数组。插件透明解析 NPY 二进制格式（v1.0/v2.0/v3.0），展示实际的数组形状、数据类型和值，而非原始字节。支持所有标准 NumPy 数据类型（int8-64、uint8-64、float16-64、bool）。解析后的数组使用标准的折线图/热力图/表格可视化展示。
+
+## JSON 查看器（实验性）
+
+> **注意：** JSON 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
+
+以 `.json` 扩展名命名的 dataset 在可折叠的 JSON 查看面板中展示，具有语法高亮、自动格式化（将紧凑 JSON 转为缩进格式）、自动换行开关和一键复制功能。
+
 ## 压缩插件
 
 支持的 HDF5 压缩过滤器：**Blosc**、**Blosc2**、**Bitshuffle**、**BZIP2**、**JPEG**、**LZ4**、**LZF**、**ZFP**、**Zstandard**。

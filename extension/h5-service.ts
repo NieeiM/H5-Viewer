@@ -16,7 +16,12 @@ import {
   extractSampleRate, inferAudioLayout,
 } from './audio-detect.js';
 import type { AudioHint } from './models.js';
+import { parseNpy } from './npy-parser.js';
 import { PLUGINS } from './plugins.js';
+
+// Patterns for special dataset names
+const NPY_EXT = /\.npy$/i;
+const JSON_EXT = /\.json$/i;
 
 // We use `any` for h5wasm types since the module is loaded dynamically
 // and esbuild marks it as external.
@@ -471,7 +476,40 @@ export class H5Service {
    */
   getEntity(path: string): unknown {
     this.ensureOpen();
-    return this.parseEntity(path, false);
+
+    const entity = this.parseEntity(path, false) as Record<string, unknown>;
+
+    // For .npy datasets: override shape/type with parsed NPY metadata
+    if (entity.kind === 'dataset') {
+      const name = (entity.name as string) || '';
+      if (NPY_EXT.test(name)) {
+        try {
+          const npyResult = this.parseNpyDataset(path);
+          entity.shape = npyResult.shape;
+          entity.type = npyResult.dtype;
+          (entity as Record<string, unknown>)._npyOverride = true;
+        } catch {
+          // If NPY parsing fails, show the raw uint8 dataset as-is
+        }
+      }
+    }
+
+    // For groups: also override children that are .npy datasets
+    if (entity.kind === 'group' && Array.isArray(entity.children)) {
+      for (const child of entity.children as Array<Record<string, unknown>>) {
+        if (child.kind === 'dataset' && NPY_EXT.test(child.name as string || '')) {
+          try {
+            const npyResult = this.parseNpyDataset(child.path as string);
+            child.shape = npyResult.shape;
+            child.type = npyResult.dtype;
+          } catch {
+            // Keep original
+          }
+        }
+      }
+    }
+
+    return entity;
   }
 
   /**
@@ -480,6 +518,18 @@ export class H5Service {
    */
   getValue(path: string, selection?: string): unknown {
     this.ensureOpen();
+
+    const name = path.split('/').pop() || '';
+
+    // .npy datasets: return the parsed NPY data instead of raw bytes
+    if (NPY_EXT.test(name)) {
+      try {
+        const npyResult = this.parseNpyDataset(path);
+        return npyResult.value;
+      } catch {
+        // Fall through to raw read
+      }
+    }
 
     const dataset = new this.DatasetClass(this.fileId!, path);
 
@@ -508,6 +558,17 @@ export class H5Service {
     }
 
     return serializeValue(value);
+  }
+
+  /**
+   * Parse a .npy blob dataset. Reads raw bytes and parses the NPY header + data.
+   */
+  private parseNpyDataset(path: string): import('./npy-parser.js').NpyResult {
+    const dataset = new this.DatasetClass(this.fileId!, path);
+    this.ensurePluginsForDataset(path);
+    const raw = dataset.value;
+    const buf = Buffer.from(raw instanceof Uint8Array ? raw : new Uint8Array(raw as ArrayBuffer));
+    return parseNpy(buf);
   }
 
   /**
@@ -617,6 +678,67 @@ export class H5Service {
       numSamples,
       channelFirst,
     };
+  }
+
+  /**
+   * Scan for .json datasets in the file.
+   */
+  getJsonHints(): import('./models.js').JsonHint[] {
+    this.ensureOpen();
+    const hints: import('./models.js').JsonHint[] = [];
+    const allPaths = this.h5wasm.get_names(this.fileId!, '/', true) as string[];
+
+    for (const relPath of allPaths) {
+      const path = `/${relPath}`;
+      try {
+        const kind = this.h5wasm.get_type(this.fileId!, path) as number;
+        if (kind !== this.h5wasm.H5G_DATASET) continue;
+        const name = relPath.split('/').pop() || relPath;
+        if (!JSON_EXT.test(name)) continue;
+
+        const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+        const totalBytes = (meta.shape || []).reduce((a: number, b: number) => a * b, 1) * meta.size;
+        hints.push({ path, name, dataSize: totalBytes });
+      } catch {
+        // skip
+      }
+    }
+    this.log.debug(`[H5Service] Found ${hints.length} JSON datasets`);
+    return hints;
+  }
+
+  /**
+   * Read a .json dataset, parse it, and return the formatted JSON string.
+   */
+  getJsonData(path: string): { json: string; parsed: unknown } {
+    this.ensureOpen();
+    const dataset = new this.DatasetClass(this.fileId!, path);
+    this.ensurePluginsForDataset(path);
+    const raw = dataset.value;
+
+    let str: string;
+    if (typeof raw === 'string') {
+      str = raw;
+    } else if (raw instanceof Uint8Array) {
+      str = new TextDecoder().decode(raw);
+    } else if (Array.isArray(raw)) {
+      // Array of char codes or strings
+      str = (raw as Array<string | number>).map(v =>
+        typeof v === 'number' ? String.fromCharCode(v) : v,
+      ).join('');
+    } else {
+      str = String(raw);
+    }
+
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(str);
+      const formatted = JSON.stringify(parsed, null, 2);
+      return { json: formatted, parsed };
+    } catch {
+      // Not valid JSON — return as-is
+      return { json: str, parsed: null };
+    }
   }
 
   // ---- Private helpers ----

@@ -203,6 +203,14 @@ export class CntService {
     throw new Error('Audio playback is not supported for CNT files');
   }
 
+  getJsonHints(): import('./models.js').JsonHint[] {
+    return [];
+  }
+
+  getJsonData(_path: string): unknown {
+    throw new Error('JSON viewing is not supported for CNT files');
+  }
+
   // ---------------------------------------------------------------------------
   // Private: Channel data loading (on-demand)
   // ---------------------------------------------------------------------------

@@ -89,6 +89,18 @@ The viewer automatically detects audio data inside HDF5/MAT files and shows a co
 
 Features: playback controls (play/pause, seek, volume), waveform visualization (Canvas 2D), and spectrogram visualization (FFT via ooura library). Large datasets trigger a warning before loading.
 
+## NumPy .npy Support (Experimental)
+
+> **Note:** NPY support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
+
+Datasets named with `.npy` extension inside HDF5/MAT files are automatically recognized as embedded NumPy arrays. The NPY binary format (v1.0/v2.0/v3.0) is parsed transparently — the viewer shows the actual array shape, dtype, and data instead of raw bytes. Supports all standard NumPy dtypes (int8-64, uint8-64, float16-64, bool). The parsed array is displayed using the standard Line/Heatmap/Matrix visualizations.
+
+## JSON Viewer (Experimental)
+
+> **Note:** JSON support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
+
+Datasets named with `.json` extension are displayed in a collapsible JSON Viewer panel with syntax highlighting, pretty-printing (auto-formats compact JSON to indented), word wrap toggle, and copy-to-clipboard.
+
 ## Compression Plugins
 
 Supported HDF5 compression filters: **Blosc**, **Blosc2**, **Bitshuffle**, **BZIP2**, **JPEG**, **LZ4**, **LZF**, **ZFP**, **Zstandard**.

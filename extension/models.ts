@@ -43,7 +43,18 @@ export type RpcMethod =
   | 'getAttrValues'
   | 'getSearchablePaths'
   | 'getAudioHints'
-  | 'getAudioData';
+  | 'getAudioData'
+  | 'getJsonHints'
+  | 'getJsonData';
+
+// ---- JSON types ----
+
+export interface JsonHint {
+  path: string;
+  name: string;
+  /** Size in bytes of the raw JSON string */
+  dataSize: number;
+}
 
 // ---- Audio types ----
 

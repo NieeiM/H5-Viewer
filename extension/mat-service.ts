@@ -299,6 +299,29 @@ export class MatService {
     return { type: 'pcm', data: serialized, sampleRate, numChannels, numSamples, channelFirst };
   }
 
+  getJsonHints(): import('./models.js').JsonHint[] {
+    const hints: import('./models.js').JsonHint[] = [];
+    for (const [path, node] of this.nodeMap) {
+      if (node.kind !== 'dataset') continue;
+      if (/\.json$/i.test(node.name)) {
+        hints.push({ path, name: node.name, dataSize: 0 });
+      }
+    }
+    return hints;
+  }
+
+  getJsonData(path: string): { json: string; parsed: unknown } {
+    const node = this.nodeMap.get(path);
+    if (!node || node.kind !== 'dataset') throw new Error(`Dataset not found: ${path}`);
+    const raw = typeof node.value === 'string' ? node.value : JSON.stringify(node.value);
+    try {
+      const parsed = JSON.parse(raw);
+      return { json: JSON.stringify(parsed, null, 2), parsed };
+    } catch {
+      return { json: raw, parsed: null };
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Private: Tree building
   // ---------------------------------------------------------------------------
