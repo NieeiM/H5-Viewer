@@ -16,6 +16,7 @@
 - **Tables** — Matrix view for numerical and compound datasets
 - **RGB images** — Direct visualization of RGB datasets
 - **3D slicing** — Navigate slices of 3D+ datasets interactively
+- **Audio playback** — Play audio data stored in HDF5/MAT files with waveform and spectrogram visualization
 - **NeXus support** — Automatic interpretation of NXdata groups and axes
 - **Metadata inspector** — Attributes, chunk layout, compression filters, and data types
 - **Search** — Find entities across the entire file tree
@@ -76,6 +77,18 @@ To set H5 Viewer as default for additional extensions:
 }
 ```
 
+## Audio Data Support (Experimental)
+
+> **Note:** Audio support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
+
+The viewer automatically detects audio data inside HDF5/MAT files and shows a collapsible Audio Player panel at the bottom:
+
+**Encoded audio blobs** — Datasets named with audio extensions (`.mp3`, `.wav`, `.flac`, `.ogg`, `.aac`, `.m4a`, `.opus`). Content is decoded using the browser's `AudioContext.decodeAudioData()`.
+
+**PCM sample arrays** — 1D or 2D numeric datasets that look like raw audio (e.g. shape `[160000]` or `[2, 160000]`). Sample rate is read from attributes (`sample_rate`, `sampleRate`, etc.) or defaults to 44100 Hz.
+
+Features: playback controls (play/pause, seek, volume), waveform visualization (Canvas 2D), and spectrogram visualization (FFT via ooura library). Large datasets trigger a warning before loading.
+
 ## Compression Plugins
 
 Supported HDF5 compression filters: **Blosc**, **Blosc2**, **Bitshuffle**, **BZIP2**, **JPEG**, **LZ4**, **LZF**, **ZFP**, **Zstandard**.
@@ -123,7 +136,10 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 ## Credits
 
-Built on top of [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.com/usnistgov/h5wasm) by ESRF (European Synchrotron Radiation Facility).
+Built on top of:
+- [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.com/usnistgov/h5wasm) by ESRF (European Synchrotron Radiation Facility)
+- Audio playback and spectrum visualization adapted from [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview) by sukumo28 (MIT License)
+- ANT Neuro CNT RAW3 decompression ported from [libeep](https://github.com/mscheltienne/antio) (LGPL-3.0)
 
 ## License
 

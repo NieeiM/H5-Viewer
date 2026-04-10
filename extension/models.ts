@@ -41,7 +41,32 @@ export type RpcMethod =
   | 'getEntity'
   | 'getValue'
   | 'getAttrValues'
-  | 'getSearchablePaths';
+  | 'getSearchablePaths'
+  | 'getAudioHints'
+  | 'getAudioData';
+
+// ---- Audio types ----
+
+export type AudioDatasetType = 'encoded-blob' | 'pcm-array';
+
+export interface AudioHint {
+  /** HDF5 path to the dataset */
+  path: string;
+  /** Display name */
+  name: string;
+  /** How the data should be interpreted */
+  audioType: AudioDatasetType;
+  /** Sample rate in Hz (only for pcm-array, 0 if unknown) */
+  sampleRate: number;
+  /** Number of channels (only for pcm-array, 0 if unknown) */
+  numChannels: number;
+  /** Total number of samples per channel (only for pcm-array) */
+  numSamples: number;
+  /** Dataset size in bytes (for encoded blobs) or total element count */
+  dataSize: number;
+  /** Warning message if the data is very large */
+  warning?: string;
+}
 
 export interface RpcRequest {
   id: number;

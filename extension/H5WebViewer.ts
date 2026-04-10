@@ -39,6 +39,8 @@ interface DataService {
   getValue(path: string, selection?: string): unknown;
   getAttrValues(path: string): Record<string, unknown>;
   getSearchablePaths(rootPath: string): string[];
+  getAudioHints(): unknown[];
+  getAudioData(path: string): unknown;
   close(): void;
 }
 
@@ -199,6 +201,12 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
               break;
             case 'getSearchablePaths':
               result = service.getSearchablePaths(params.path as string);
+              break;
+            case 'getAudioHints':
+              result = service.getAudioHints();
+              break;
+            case 'getAudioData':
+              result = service.getAudioData(params.path as string);
               break;
             default:
               throw new Error(`Unknown RPC method: ${method}`);

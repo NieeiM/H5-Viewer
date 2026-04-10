@@ -15,6 +15,7 @@
 
 import { openSync, readSync, closeSync, statSync } from 'node:fs';
 import type { Logger } from './h5-service.js';
+import type { AudioHint } from './models.js';
 import { NeuroscanParser, type NeuroscanHeader } from './cnt-neuroscan.js';
 import { AntParser, type AntHeader } from './cnt-ant.js';
 
@@ -190,6 +191,16 @@ export class CntService {
 
   getSearchablePaths(_rootPath: string): string[] {
     return Array.from(this.nodeMap.keys()).filter((p) => p !== '/');
+  }
+
+  getAudioHints(): AudioHint[] {
+    // CNT files are EEG data — not typically audio, but each channel is a 1D signal
+    // Don't auto-detect as audio since EEG channels aren't meant for audio playback
+    return [];
+  }
+
+  getAudioData(_path: string): unknown {
+    throw new Error('Audio playback is not supported for CNT files');
   }
 
   // ---------------------------------------------------------------------------

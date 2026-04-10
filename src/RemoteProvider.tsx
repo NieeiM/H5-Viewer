@@ -2,23 +2,23 @@
  * React component that wraps RemoteH5Api into a DataProvider.
  */
 
-import { App, DataProvider } from '@h5web/app';
+import { DataProvider } from '@h5web/app';
 import { useMemo, type PropsWithChildren } from 'react';
 
-import { RemoteH5Api, RpcClient } from './remote-api';
+import { RemoteH5Api, type RpcClient } from './remote-api';
 import { vscode } from './vscode-api';
 
 interface Props {
   filepath: string;
+  rpc: RpcClient;
 }
 
 function RemoteProvider(props: PropsWithChildren<Props>) {
-  const { filepath, children } = props;
+  const { filepath, rpc, children } = props;
 
   const api = useMemo(() => {
-    const rpc = new RpcClient(vscode);
     return new RemoteH5Api(filepath, rpc, vscode);
-  }, [filepath]);
+  }, [filepath, rpc]);
 
   return (
     <DataProvider api={api}>

@@ -10,6 +10,12 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import {
+  isAudioByName, isAudioByShape,
+  makeEncodedBlobHint, makePcmArrayHint,
+  extractSampleRate, inferAudioLayout,
+} from './audio-detect.js';
+import type { AudioHint } from './models.js';
 import { PLUGINS } from './plugins.js';
 
 // We use `any` for h5wasm types since the module is loaded dynamically
@@ -526,6 +532,91 @@ export class H5Service {
     return this.h5wasm
       .get_names(this.fileId!, rootPath, true)
       .map((p: string) => `${rootPath}${p}`);
+  }
+
+  /**
+   * Scan the file tree for datasets that look like audio data.
+   */
+  getAudioHints(): AudioHint[] {
+    this.ensureOpen();
+    const hints: AudioHint[] = [];
+    const allPaths = this.h5wasm.get_names(this.fileId!, '/', true) as string[];
+
+    for (const relPath of allPaths) {
+      const path = `/${relPath}`;
+      try {
+        const kind = this.h5wasm.get_type(this.fileId!, path) as number;
+        if (kind !== this.h5wasm.H5G_DATASET) continue;
+
+        const name = relPath.split('/').pop() || relPath;
+
+        // Check 1: encoded blob (name ends with audio extension)
+        if (isAudioByName(name)) {
+          const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+          const totalBytes = (meta.shape || []).reduce((a: number, b: number) => a * b, 1) * meta.size;
+          hints.push(makeEncodedBlobHint(path, name, totalBytes));
+          continue;
+        }
+
+        // Check 2: PCM array (shape + dtype match)
+        const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+        const dtype = parseDType(meta);
+        const dtypeClass = (dtype as Record<string, string>)?.class;
+        if (isAudioByShape(meta.shape, dtypeClass)) {
+          const attrValues = this.getAttrValues(path);
+          hints.push(makePcmArrayHint(path, name, meta.shape, dtypeClass, attrValues));
+        }
+      } catch {
+        // Skip datasets that can't be read
+      }
+    }
+
+    this.log.debug(`[H5Service] Found ${hints.length} audio datasets`);
+    return hints;
+  }
+
+  /**
+   * Read audio data for a specific dataset.
+   * For encoded blobs: returns { type: 'encoded', data: number[] } (raw bytes)
+   * For PCM arrays: returns { type: 'pcm', data: serialized typed array, sampleRate, numChannels, channelFirst }
+   */
+  getAudioData(path: string): unknown {
+    this.ensureOpen();
+
+    const name = path.split('/').pop() || path;
+    const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+
+    if (isAudioByName(name)) {
+      // Encoded blob — read as raw bytes
+      const dataset = new this.DatasetClass(this.fileId!, path);
+      const value = dataset.value;
+      let bytes: number[];
+      if (value instanceof Uint8Array) {
+        bytes = Array.from(value);
+      } else if (Array.isArray(value)) {
+        bytes = value as number[];
+      } else {
+        bytes = Array.from(new Uint8Array((value as ArrayBuffer)));
+      }
+      return { type: 'encoded', data: bytes };
+    }
+
+    // PCM array — read and serialize
+    const dataset = new this.DatasetClass(this.fileId!, path);
+    const value = dataset.value;
+    const serialized = serializeValue(value);
+    const { numChannels, numSamples, channelFirst } = inferAudioLayout(meta.shape);
+    const attrValues = this.getAttrValues(path);
+    const sampleRate = extractSampleRate(attrValues) || 0;
+
+    return {
+      type: 'pcm',
+      data: serialized,
+      sampleRate,
+      numChannels,
+      numSamples,
+      channelFirst,
+    };
   }
 
   // ---- Private helpers ----

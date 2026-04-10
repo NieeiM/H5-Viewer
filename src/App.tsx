@@ -1,6 +1,6 @@
 import { App as H5WebApp } from '@h5web/app';
 import { useEventListener } from '@react-hookz/web';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import {
@@ -9,6 +9,8 @@ import {
   type Message,
   MessageType,
 } from '../extension/models';
+import AudioPanel from './audio/AudioPanel';
+import { RpcClient } from './remote-api';
 import RemoteProvider from './RemoteProvider';
 import { vscode } from './vscode-api';
 
@@ -85,6 +87,9 @@ function App() {
   const [revision, setRevision] = useState(0);
   const [progress, setProgress] = useState<LoadingProgress | null>(null);
 
+  // Single RpcClient shared by RemoteProvider and AudioPanel
+  const rpc = useMemo(() => new RpcClient(vscode), []);
+
   useEventListener(globalThis, 'message', (evt: MessageEvent<Message>) => {
     const { data: message } = evt;
     if (message.type === MessageType.FileInfo) {
@@ -143,11 +148,16 @@ function App() {
           <code style={styles.code}> save('file.mat', '-v7.3')</code>
         </div>
       )}
-      <Suspense fallback={<LoadingScreen progress={progress} />}>
-        <RemoteProvider key={revision} filepath={fileInfo.name}>
-          <H5WebApp />
-        </RemoteProvider>
-      </Suspense>
+      <div style={styles.mainLayout}>
+        <div style={styles.viewerArea}>
+          <Suspense fallback={<LoadingScreen progress={progress} />}>
+            <RemoteProvider key={revision} filepath={fileInfo.name} rpc={rpc}>
+              <H5WebApp />
+            </RemoteProvider>
+          </Suspense>
+        </div>
+        <AudioPanel rpc={rpc} />
+      </div>
     </ErrorBoundary>
   );
 }
@@ -157,6 +167,17 @@ function App() {
 // ---------------------------------------------------------------------------
 
 const styles: Record<string, React.CSSProperties> = {
+  mainLayout: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    overflow: 'hidden',
+  },
+  viewerArea: {
+    flex: 1,
+    overflow: 'hidden',
+    minHeight: 0,
+  },
   loadingContainer: {
     display: 'flex',
     justifyContent: 'center',

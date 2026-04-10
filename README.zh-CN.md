@@ -16,6 +16,7 @@
 - **表格视图** — 数值矩阵和复合数据集的表格展示
 - **RGB 图像** — 直接可视化 RGB 数据集
 - **3D 切片浏览** — 交互式浏览 3D 及更高维数据集的切片
+- **音频播放** — 播放 HDF5/MAT 文件中存储的音频数据，带波形和频谱可视化
 - **NeXus 支持** — 自动解释 NXdata 组和轴数据集
 - **元数据检查器** — 查看属性、chunk 布局、压缩过滤器、数据类型
 - **搜索** — 在整个文件树中搜索实体
@@ -76,6 +77,18 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 }
 ```
 
+## 音频数据支持（实验性）
+
+> **注意：** 音频支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
+
+插件自动检测 HDF5/MAT 文件中的音频数据，并在底部显示可折叠的音频播放面板：
+
+**编码音频 blob** — 以音频扩展名（`.mp3`、`.wav`、`.flac`、`.ogg`、`.aac`、`.m4a`、`.opus`）命名的 dataset。使用浏览器 `AudioContext.decodeAudioData()` 解码。
+
+**PCM 采样数组** — 看起来像音频的 1D 或 2D 数值 dataset（如 shape `[160000]` 或 `[2, 160000]`）。采样率从属性中读取（`sample_rate`、`sampleRate` 等），默认 44100 Hz。
+
+功能：播放控制（播放/暂停、拖动、音量）、波形可视化（Canvas 2D）、频谱图可视化（FFT，使用 ooura 库）。大数据集加载前会显示警告。
+
 ## 压缩插件
 
 支持的 HDF5 压缩过滤器：**Blosc**、**Blosc2**、**Bitshuffle**、**BZIP2**、**JPEG**、**LZ4**、**LZF**、**ZFP**、**Zstandard**。
@@ -123,7 +136,10 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 ## 致谢
 
-基于 ESRF（欧洲同步辐射光源）开发的 [H5Web](https://h5web.panosc.eu/) 和 [h5wasm](https://github.com/usnistgov/h5wasm) 构建。
+基于以下项目构建：
+- [H5Web](https://h5web.panosc.eu/) 和 [h5wasm](https://github.com/usnistgov/h5wasm)，由 ESRF（欧洲同步辐射光源）开发
+- 音频播放和频谱可视化改编自 [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview)，由 sukumo28 开发（MIT 许可证）
+- ANT Neuro CNT RAW3 解压缩移植自 [libeep](https://github.com/mscheltienne/antio)（LGPL-3.0）
 
 ## 许可证
 

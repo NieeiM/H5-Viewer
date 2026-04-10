@@ -16,7 +16,13 @@
 
 import { readFileSync, statSync } from 'node:fs';
 
+import {
+  isAudioByName, isAudioByShape,
+  makeEncodedBlobHint, makePcmArrayHint,
+  inferAudioLayout,
+} from './audio-detect.js';
 import type { Logger } from './h5-service.js';
+import type { AudioHint } from './models.js';
 
 // DType classes — must match h5-service.ts / @h5web/shared
 const DTypeClass = {
@@ -237,6 +243,60 @@ export class MatService {
       collect(startNode);
     }
     return paths;
+  }
+
+  getAudioHints(): AudioHint[] {
+    const hints: AudioHint[] = [];
+    for (const [path, node] of this.nodeMap) {
+      if (node.kind !== 'dataset') continue;
+      const name = node.name;
+
+      if (isAudioByName(name) && node.value !== undefined) {
+        const size = Array.isArray(node.value) ? (node.value as unknown[]).length : 0;
+        hints.push(makeEncodedBlobHint(path, name, size));
+        continue;
+      }
+
+      const dtypeClass = (node.type as Record<string, string>)?.class;
+      if (node.shape && isAudioByShape(node.shape, dtypeClass)) {
+        const attrValues = (node._attrValues as Record<string, unknown>) || {};
+        hints.push(makePcmArrayHint(path, name, node.shape, dtypeClass || '', attrValues));
+      }
+    }
+    return hints;
+  }
+
+  getAudioData(path: string): unknown {
+    const node = this.nodeMap.get(path);
+    if (!node || node.kind !== 'dataset') throw new Error(`Dataset not found: ${path}`);
+
+    const name = node.name;
+    if (isAudioByName(name)) {
+      // Encoded blob
+      const value = node.value;
+      let bytes: number[];
+      if (value instanceof Uint8Array) {
+        bytes = Array.from(value);
+      } else if (Array.isArray(value)) {
+        bytes = value as number[];
+      } else {
+        bytes = [];
+      }
+      return { type: 'encoded', data: bytes };
+    }
+
+    // PCM array
+    const serialized = this.serializeValue(node.value);
+    const shape = node.shape || [0];
+    const { numChannels, numSamples, channelFirst } = inferAudioLayout(shape);
+    const attrValues = (node._attrValues as Record<string, unknown>) || {};
+    let sampleRate = 0;
+    for (const key of ['sample_rate', 'sampleRate', 'sampling_rate', 'sr', 'fs']) {
+      const v = attrValues[key];
+      if (typeof v === 'number' && v > 0) { sampleRate = v; break; }
+    }
+
+    return { type: 'pcm', data: serialized, sampleRate, numChannels, numSamples, channelFirst };
   }
 
   // ---------------------------------------------------------------------------
