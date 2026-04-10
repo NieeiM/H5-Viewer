@@ -23,6 +23,10 @@ export interface LoadingProgress {
   message: string;
   /** 0-100, or -1 for indeterminate */
   percent: number;
+  /** File name being loaded */
+  fileName?: string;
+  /** File size in bytes */
+  fileSize?: number;
 }
 
 export interface Export {

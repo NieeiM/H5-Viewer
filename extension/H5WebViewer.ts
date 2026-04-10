@@ -85,10 +85,14 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       trace: (msg, ...args) => this.outputChannel.trace(msg, ...args),
     };
 
+    // File name/size are captured once on Ready and included in all progress messages
+    let currentFileName = '';
+    let currentFileSize = 0;
+
     const sendProgress = (message: string, percent = -1) => {
       webview.postMessage({
         type: MessageType.LoadingProgress,
-        data: { message, percent },
+        data: { message, percent, fileName: currentFileName, fileSize: currentFileSize },
       });
     };
 
@@ -100,6 +104,11 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
           const name = basename(filePath);
           const { size } = statSync(filePath);
           const ext = extname(filePath).toLowerCase();
+
+          // Send initial progress immediately so webview can show file info
+          currentFileName = name;
+          currentFileSize = size;
+          sendProgress(`Opening ${name}...`);
 
           // Determine file format and initialize appropriate service
           const { fileInfo, dataService } = await this.initService(
@@ -398,7 +407,7 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     const cspRules = [
       "default-src 'none'",
       `script-src ${cspSource} 'unsafe-eval'`,
-      `style-src ${cspSource}`,
+      `style-src ${cspSource} 'unsafe-inline'`,
       'img-src blob:',
       'worker-src blob:',
     ];
@@ -413,12 +422,45 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
           content="${cspRules.join('; ')};"
         >
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<title>H5Web</title>
+				<title>H5 Viewer</title>
         <script type="module" src="${jsUri.toString()}"></script>
         <link rel="stylesheet" href="${cssUri.toString()}">
+        <style>
+          #preload-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+            color: #888;
+            background: #1e1e1e;
+          }
+          #preload-screen .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #333;
+            border-top-color: #4ec9b0;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          #preload-screen .text {
+            font-size: 13px;
+            opacity: 0.7;
+          }
+        </style>
 			</head>
 			<body>
-				<div id="root"></div>
+				<div id="root">
+          <div id="preload-screen">
+            <div class="spinner"></div>
+            <div class="text">Loading H5 Viewer...</div>
+          </div>
+        </div>
 			</body>
 			</html>`;
   }

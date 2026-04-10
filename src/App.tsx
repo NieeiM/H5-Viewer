@@ -21,6 +21,65 @@ const FORMAT_LABELS: Record<string, string> = {
   'cnt-ant': 'ANT Neuro CNT',
 };
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+// ---------------------------------------------------------------------------
+// Loading screen component
+// ---------------------------------------------------------------------------
+
+function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
+  const fileName = progress?.fileName;
+  const fileSize = progress?.fileSize;
+  const message = progress?.message || 'Initializing...';
+
+  return (
+    <div style={styles.loadingContainer}>
+      <div style={styles.loadingCard}>
+        {/* Spinner */}
+        <div style={styles.spinner} />
+
+        {/* File info */}
+        {fileName && (
+          <div style={styles.fileInfo}>
+            <div style={styles.fileName}>{fileName}</div>
+            {fileSize !== undefined && fileSize > 0 && (
+              <div style={styles.fileSizeText}>{formatSize(fileSize)}</div>
+            )}
+          </div>
+        )}
+
+        {/* Current step */}
+        <div style={styles.stepText}>{message}</div>
+
+        {/* Progress bar */}
+        {progress && progress.percent >= 0 ? (
+          <div style={styles.progressBarOuter}>
+            <div
+              style={{
+                ...styles.progressBarInner,
+                width: `${progress.percent}%`,
+              }}
+            />
+          </div>
+        ) : (
+          <div style={styles.progressBarOuter}>
+            <div style={styles.progressBarPulse} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main App
+// ---------------------------------------------------------------------------
+
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo>();
   const [revision, setRevision] = useState(0);
@@ -30,7 +89,7 @@ function App() {
     const { data: message } = evt;
     if (message.type === MessageType.FileInfo) {
       setFileInfo(message.data);
-      setProgress(null); // Loading complete
+      setProgress(null);
     }
     if (message.type === MessageType.FileChanged) {
       setRevision((r) => r + 1);
@@ -44,44 +103,15 @@ function App() {
     vscode.postMessage({ type: MessageType.Ready });
   }, []);
 
-  // Still connecting — no messages received yet
-  if (!fileInfo && !progress) {
-    return <div style={styles.container}><p>Connecting to service...</p></div>;
-  }
-
-  // Loading in progress (MAT v5/v7 full file load)
-  if (!fileInfo && progress) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.progressBox}>
-          <p style={styles.progressText}>{progress.message}</p>
-          {progress.percent >= 0 ? (
-            <div style={styles.progressBarOuter}>
-              <div
-                style={{
-                  ...styles.progressBarInner,
-                  width: `${progress.percent}%`,
-                }}
-              />
-            </div>
-          ) : (
-            <div style={styles.progressBarOuter}>
-              <div style={styles.progressBarIndeterminate} />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
+  // Still loading (no FileInfo yet) — show loading screen
   if (!fileInfo) {
-    return null;
+    return <LoadingScreen progress={progress} />;
   }
 
   // Error message from extension (unsupported format, etc.)
   if (fileInfo.errorMessage) {
     return (
-      <div style={styles.container}>
+      <div style={styles.loadingContainer}>
         <div style={styles.errorBox}>
           <h3 style={styles.errorTitle}>Cannot open file</h3>
           <pre style={styles.errorMessage}>{fileInfo.errorMessage}</pre>
@@ -91,33 +121,29 @@ function App() {
   }
 
   if (fileInfo.size === 0) {
-    return <div style={styles.container}><p>File does not exist</p></div>;
+    return <div style={styles.loadingContainer}><p style={{ color: '#888' }}>File does not exist</p></div>;
   }
 
-  // Format badge for MAT v5/v7 (reminder that data is fully loaded in memory)
+  // Format badge for MAT v5/v7
   const formatLabel = fileInfo.format ? FORMAT_LABELS[fileInfo.format] : undefined;
   const isMatLegacy = fileInfo.format === 'mat-v5' || fileInfo.format === 'mat-v7';
 
   return (
     <ErrorBoundary
       fallbackRender={({ error }) => (
-        <div style={styles.container}>
-          <p>{error instanceof Error ? error.message : 'Unknown error'}</p>
+        <div style={styles.loadingContainer}>
+          <p style={{ color: '#f48771' }}>{error instanceof Error ? error.message : 'Unknown error'}</p>
         </div>
       )}
     >
       {isMatLegacy && (
         <div style={styles.banner}>
-          {formatLabel} — Entire file loaded into memory ({(fileInfo.size / 1024 / 1024).toFixed(1)} MB).
+          {formatLabel} — Entire file loaded into memory ({formatSize(fileInfo.size)}).
           For better performance with large files, resave as MAT v7.3:
           <code style={styles.code}> save('file.mat', '-v7.3')</code>
         </div>
       )}
-      <Suspense fallback={
-        <div style={styles.container}>
-          <p>{progress?.message || 'Loading file structure...'}</p>
-        </div>
-      }>
+      <Suspense fallback={<LoadingScreen progress={progress} />}>
         <RemoteProvider key={revision} filepath={fileInfo.name}>
           <H5WebApp />
         </RemoteProvider>
@@ -126,31 +152,63 @@ function App() {
   );
 }
 
-// Inline styles to avoid depending on CSS modules
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles: Record<string, React.CSSProperties> = {
-  container: {
+  loadingContainer: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
     padding: '2rem',
-    color: '#ccc',
-    fontFamily: 'system-ui, sans-serif',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    background: '#1e1e1e',
   },
-  progressBox: {
-    textAlign: 'center',
-    maxWidth: 400,
+  loadingCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    maxWidth: 380,
     width: '100%',
+    gap: '12px',
   },
-  progressText: {
-    marginBottom: '1rem',
-    fontSize: '0.9rem',
+  spinner: {
+    width: 32,
+    height: 32,
+    border: '3px solid #333',
+    borderTopColor: '#4ec9b0',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+    marginBottom: 4,
+  },
+  fileInfo: {
+    textAlign: 'center' as const,
+  },
+  fileName: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#ddd',
+    wordBreak: 'break-all' as const,
+  },
+  fileSizeText: {
+    fontSize: '12px',
+    color: '#888',
+    marginTop: 2,
+  },
+  stepText: {
+    fontSize: '12px',
+    color: '#999',
+    textAlign: 'center' as const,
   },
   progressBarOuter: {
-    height: 4,
+    width: '100%',
+    height: 3,
     background: '#333',
     borderRadius: 2,
     overflow: 'hidden',
+    marginTop: 4,
   },
   progressBarInner: {
     height: '100%',
@@ -158,17 +216,17 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 2,
     transition: 'width 0.3s ease',
   },
-  progressBarIndeterminate: {
+  progressBarPulse: {
     height: '100%',
-    width: '30%',
-    background: '#4ec9b0',
+    width: '40%',
+    background: 'linear-gradient(90deg, transparent, #4ec9b0, transparent)',
     borderRadius: 2,
-    animation: 'indeterminate 1.5s infinite ease-in-out',
+    animation: 'pulse 1.5s ease-in-out infinite',
   },
   errorBox: {
     maxWidth: 600,
     padding: '1.5rem',
-    background: '#1e1e1e',
+    background: '#252526',
     border: '1px solid #444',
     borderRadius: 8,
   },

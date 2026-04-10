@@ -4,3 +4,13 @@
 #root {
   height: 100vh;
 }
+
+/* Loading screen animations */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}

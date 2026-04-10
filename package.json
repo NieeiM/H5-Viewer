@@ -3,7 +3,7 @@
   "displayName": "H5 Viewer",
   "publisher": "meijiahao",
   "description": "Visualize HDF5 files in VS Code with optimized remote support",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {
