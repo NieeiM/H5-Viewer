@@ -1,5 +1,8 @@
 # H5 Viewer
 
+[![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
+[![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
+
 **在 VS Code 中直接可视化 HDF5 文件** — 专为 Remote SSH 远程开发优化，按需加载数据。
 
 [English / 英文文档](./README.md)
@@ -75,6 +78,24 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 │  压缩插件在本地加载    │              │  @h5web/app 渲染     │
 │                      │              │  可视化组件            │
 └──────────────────────┘              └──────────────────────┘
+```
+
+## 安装
+
+**从 GitHub Release 安装：**
+
+1. 前往 [Releases](https://github.com/NieeiM/H5-Viewer/releases)
+2. 下载 `.vsix` 文件
+3. 在 VS Code 中：`Ctrl+Shift+P` → `Extensions: Install from VSIX...`
+
+**从源码构建：**
+
+```bash
+git clone https://github.com/NieeiM/H5-Viewer.git
+cd H5-Viewer
+pnpm install
+pnpm build
+pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
 
 ## 致谢

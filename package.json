@@ -5,10 +5,13 @@
   "description": "Visualize HDF5 files in VS Code with optimized remote support",
   "version": "1.0.2",
   "license": "MIT",
-  "homepage": "https://github.com/silx-kit/vscode-h5web",
+  "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {
     "type": "git",
-    "url": "https://github.com/silx-kit/vscode-h5web.git"
+    "url": "https://github.com/NieeiM/H5-Viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NieeiM/H5-Viewer/issues"
   },
   "icon": "assets/icon.png",
   "galleryBanner": {

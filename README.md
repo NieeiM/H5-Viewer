@@ -1,5 +1,8 @@
 # H5 Viewer
 
+[![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
+[![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
+
 **Visualize HDF5 files directly in VS Code** — optimized for Remote SSH with on-demand data loading.
 
 [Chinese / 中文文档](./README.zh-CN.md)
@@ -75,6 +78,24 @@ Remote Server                          Local Machine
 │  Compression plugins │              │  @h5web/app renders  │
 │  loaded locally      │              │  visualizations      │
 └──────────────────────┘              └──────────────────────┘
+```
+
+## Installation
+
+**From GitHub Release:**
+
+1. Go to [Releases](https://github.com/NieeiM/H5-Viewer/releases)
+2. Download the `.vsix` file
+3. In VS Code: `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
+
+**From source:**
+
+```bash
+git clone https://github.com/NieeiM/H5-Viewer.git
+cd H5-Viewer
+pnpm install
+pnpm build
+pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
 
 ## Credits
