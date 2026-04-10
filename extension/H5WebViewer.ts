@@ -1,4 +1,4 @@
-import { readFileSync, unwatchFile, watchFile, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, unwatchFile, watchFile, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 import { type Manifest } from 'vite';
@@ -12,11 +12,10 @@ import {
   type Webview,
   type WebviewPanel,
   window,
-  workspace,
 } from 'vscode';
 
-import { type Message, MessageType } from './models';
-import { PLUGINS } from './plugins';
+import { H5Service } from './h5-service.js';
+import { type Message, MessageType, type RpcRequest } from './models.js';
 
 export default class H5WebViewer implements CustomReadonlyEditorProvider {
   public constructor(
@@ -36,7 +35,6 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     const { extensionUri } = this.context;
 
     // Allow opening files outside of workspace
-    // https://github.com/ucodkr/vscode-tiff/blob/9a4f976584fcba24e9f25680fcdb47fc8f97493f/src/tiffPreview.ts#L27-L30
     const resourceRoot = document.uri.with({
       path: document.uri.path.replace(/\/[^/]+?\.\w+$/u, '/'),
     });
@@ -49,31 +47,108 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     // eslint-disable-next-line require-atomic-updates
     webview.html = await this.getHtmlForWebview(webview);
 
+    // Create H5Service for this file
+    const h5service = new H5Service();
+    let serviceReady = false;
+
     webview.onDidReceiveMessage(async (evt: Message) => {
+      // ---- Ready message ----
       if (evt.type === MessageType.Ready) {
-        const uri = webview.asWebviewUri(document.uri).toString();
-        const name = basename(document.uri.fsPath);
-        const { size } = await workspace.fs.stat(document.uri);
+        try {
+          const filePath = document.uri.fsPath;
+          const name = basename(filePath);
+          const { size } = statSync(filePath);
 
-        webview.postMessage({
-          type: MessageType.FileInfo,
-          data: { uri, name, size },
-        });
+          // Initialize h5wasm/node and open the file on the server side
+          await h5service.init(filePath, this.context.extensionPath);
+          serviceReady = true;
 
-        watchFile(document.uri.fsPath, () => {
+          this.outputChannel.info(`Opened HDF5 file: ${name} (${size} bytes)`);
+
+          // Send file info to webview (no URI needed — data loaded via RPC)
           webview.postMessage({
             type: MessageType.FileInfo,
-            data: { uri, name, size },
+            data: { name, size },
           });
-        });
 
-        webviewPanel.onDidDispose(() => {
-          unwatchFile(document.uri.fsPath);
-        });
+          // Watch for file changes on disk
+          watchFile(filePath, async () => {
+            try {
+              await h5service.reopen(filePath);
+              webview.postMessage({ type: MessageType.FileChanged });
+            } catch (err) {
+              this.outputChannel.warn(
+                'Failed to reopen file after change:',
+                err instanceof Error ? err.message : 'unknown error',
+              );
+            }
+          });
+
+          webviewPanel.onDidDispose(() => {
+            unwatchFile(filePath);
+            h5service.close();
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'unknown error';
+          this.outputChannel.error('Failed to initialize H5Service:', msg);
+        }
 
         return;
       }
 
+      // ---- RPC request messages ----
+      if (evt.type === MessageType.RpcRequest) {
+        const { id, method, params } = evt.data as RpcRequest;
+
+        if (!serviceReady) {
+          webview.postMessage({
+            type: MessageType.RpcResponse,
+            data: { id, error: 'H5Service not ready yet' },
+          });
+          return;
+        }
+
+        try {
+          let result: unknown;
+
+          switch (method) {
+            case 'getEntity':
+              result = h5service.getEntity(params.path as string);
+              break;
+            case 'getValue':
+              result = h5service.getValue(
+                params.path as string,
+                params.selection as string | undefined,
+              );
+              break;
+            case 'getAttrValues':
+              result = h5service.getAttrValues(params.path as string);
+              break;
+            case 'getSearchablePaths':
+              result = h5service.getSearchablePaths(params.path as string);
+              break;
+            default:
+              throw new Error(`Unknown RPC method: ${method}`);
+          }
+
+          webview.postMessage({
+            type: MessageType.RpcResponse,
+            data: { id, result },
+          });
+        } catch (err) {
+          const errorMsg =
+            err instanceof Error ? err.message : 'Unknown error';
+          this.outputChannel.warn(`RPC ${method} error:`, errorMsg);
+          webview.postMessage({
+            type: MessageType.RpcResponse,
+            data: { id, error: errorMsg },
+          });
+        }
+
+        return;
+      }
+
+      // ---- Export message ----
       if (evt.type === MessageType.Export) {
         const { format, name, payload } = evt.data;
 
@@ -90,7 +165,7 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
           writeFileSync(saveUri.fsPath, payload);
 
           // Open output file in separate editor
-          commands.executeCommand('workbench.action.keepEditor'); // if current editor is in preview mode, keep it open
+          commands.executeCommand('workbench.action.keepEditor');
 
           try {
             await window.showTextDocument(saveUri);
@@ -125,22 +200,14 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     const jsUri = webview.asWebviewUri(jsPathOnDisk);
     const cssUri = webview.asWebviewUri(cssPathOnDisk);
 
-    const plugins = JSON.stringify(
-      Object.fromEntries(
-        Object.entries(PLUGINS).map(([name, relativePath]) => {
-          const pluginUri = Uri.joinPath(extensionUri, 'out', relativePath);
-          return [name, webview.asWebviewUri(pluginUri).toString()];
-        }),
-      ),
-    );
-
+    // Plugins are now loaded in the extension host (Node.js side),
+    // so no plugins script tag or connect-src needed.
     const cspRules = [
-      "default-src 'none'", // strict by default
-      `connect-src ${cspSource}`, // to allow fetching HDF5 file as buffer
-      `script-src ${cspSource} 'unsafe-eval'`, // 'unsafe-eval' because of cwise dependency in H5Web
+      "default-src 'none'",
+      `script-src ${cspSource} 'unsafe-eval'`,
       `style-src ${cspSource}`,
-      'img-src blob:', // for JPEG/PNG images in Raw visualization
-      'worker-src blob:', // for H5WasmLocalFileProvider's inline worker
+      'img-src blob:',
+      'worker-src blob:',
     ];
 
     return `
@@ -154,7 +221,6 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
         >
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
 				<title>H5Web</title>
-        <script id="plugins" type="application/json">${plugins}</script>
         <script type="module" src="${jsUri.toString()}"></script>
         <link rel="stylesheet" href="${cssUri.toString()}">
 			</head>

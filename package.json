@@ -1,23 +1,18 @@
 {
-  "name": "vscode-h5web",
-  "displayName": "H5Web",
-  "publisher": "h5web",
-  "description": "Visualize HDF5 files in VS Code",
-  "version": "0.2.1",
-  "author": "European Synchrotron Radiation Facility",
+  "name": "vscode-h5-viewer",
+  "displayName": "H5 Viewer",
+  "publisher": "meijiahao",
+  "description": "Visualize HDF5 files in VS Code with optimized remote support",
+  "version": "1.0.2",
   "license": "MIT",
-  "homepage": "https://h5web.panosc.eu/",
+  "homepage": "https://github.com/silx-kit/vscode-h5web",
   "repository": {
     "type": "git",
     "url": "https://github.com/silx-kit/vscode-h5web.git"
   },
-  "bugs": {
-    "url": "https://github.com/silx-kit/vscode-h5web/issues",
-    "email": "h5web@esrf.fr"
-  },
-  "icon": "assets/favicon192.png",
+  "icon": "assets/icon.png",
   "galleryBanner": {
-    "color": "#333333",
+    "color": "#162841",
     "theme": "dark"
   },
   "categories": [
@@ -32,8 +27,8 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "h5web.viewer",
-        "displayName": "H5Web",
+        "viewType": "h5viewer.viewer",
+        "displayName": "H5 Viewer",
         "selector": [
           {
             "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad}"
@@ -42,8 +37,8 @@
         "priority": "default"
       },
       {
-        "viewType": "h5web.fallback-viewer",
-        "displayName": "H5Web (any extension)",
+        "viewType": "h5viewer.fallback-viewer",
+        "displayName": "H5 Viewer (any extension)",
         "selector": [
           {
             "filenamePattern": "*"
@@ -55,9 +50,10 @@
   },
   "main": "./out/main.js",
   "scripts": {
-    "build": "pnpm build:app && pnpm build:extension --minify",
+    "build": "pnpm build:app && pnpm build:extension --minify && pnpm build:copy-h5wasm",
     "build:app": "vite build",
-    "build:extension": "esbuild ./extension/index.ts --bundle --outfile=out/main.js --external:vscode --loader:.so=file --format=esm --platform=node",
+    "build:extension": "esbuild ./extension/index.ts --bundle --outfile=out/main.js --external:vscode --external:h5wasm --external:h5wasm/node --loader:.so=file --format=esm --platform=node",
+    "build:copy-h5wasm": "node scripts/copy-h5wasm.js",
     "watch": "pnpm build:extension --sourcemap --watch",
     "lint": "pnpm \"/^lint:/\"",
     "lint:eslint": "eslint --max-warnings=0",
@@ -68,14 +64,13 @@
   },
   "dependencies": {
     "@h5web/app": "16.0.1",
-    "@h5web/h5wasm": "16.0.1",
     "@react-hookz/web": "25.1.1",
+    "h5wasm": "0.8.7",
     "h5wasm-plugins": "0.2.0",
     "normalize.css": "8.0.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-error-boundary": "6.0.0",
-    "suspend-react": "0.1.3"
+    "react-error-boundary": "6.0.0"
   },
   "devDependencies": {
     "@esrf/eslint-config": "1.6.1",

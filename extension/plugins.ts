@@ -1,4 +1,3 @@
-import { type Plugin } from '@h5web/h5wasm';
 import blosc from 'h5wasm-plugins/plugins/libH5Zblosc.so';
 import blosc2 from 'h5wasm-plugins/plugins/libH5Zblosc2.so';
 import bshuf from 'h5wasm-plugins/plugins/libH5Zbshuf.so';
@@ -9,7 +8,7 @@ import lzf from 'h5wasm-plugins/plugins/libH5Zlzf.so';
 import zfp from 'h5wasm-plugins/plugins/libH5Zzfp.so';
 import zstd from 'h5wasm-plugins/plugins/libH5Zzstd.so';
 
-export const PLUGINS = {
+export const PLUGINS: Record<string, string> = {
   bshuf,
   blosc,
   blosc2,
@@ -19,4 +18,4 @@ export const PLUGINS = {
   lzf,
   zfp,
   zstd,
-} satisfies Record<Plugin, string>;
+};

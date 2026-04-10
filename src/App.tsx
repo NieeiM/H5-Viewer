@@ -1,22 +1,24 @@
+import { App as H5WebApp } from '@h5web/app';
 import { useEventListener } from '@react-hookz/web';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { type FileInfo, type Message, MessageType } from '../extension/models';
-import StandaloneViewer from './StandaloneViewer';
-import Viewer from './Viewer';
+import RemoteProvider from './RemoteProvider';
 import { vscode } from './vscode-api';
-
-// 2 GB = 2 * 1024 * 1024 * 1024 B
-const MAX_SIZE_IN_BYTES = 2_147_483_648;
 
 function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo>();
+  const [revision, setRevision] = useState(0);
 
   useEventListener(globalThis, 'message', (evt: MessageEvent<Message>) => {
     const { data: message } = evt;
     if (message.type === MessageType.FileInfo) {
       setFileInfo(message.data);
+    }
+    if (message.type === MessageType.FileChanged) {
+      // File was modified on disk — bump revision to force re-render
+      setRevision((r) => r + 1);
     }
   });
 
@@ -25,25 +27,17 @@ function App() {
   }, []);
 
   if (!fileInfo) {
-    return null;
+    return <p>Connecting to H5 service...</p>;
   }
 
   if (fileInfo.size === 0) {
-    // e.g. when comparing git changes on an untracked file - https://github.com/silx-kit/vscode-h5web/issues/22
+    // e.g. when comparing git changes on an untracked file
     return <p>File does not exist</p>;
   }
 
-  if (fileInfo.size >= MAX_SIZE_IN_BYTES) {
-    return (
-      <StandaloneViewer
-        customMessage={
-          <p>
-            File is too large to be opened from the explorer (max 2 GB). Please
-            browse for it from here:
-          </p>
-        }
-      />
-    );
+  if (fileInfo.size < 0) {
+    // Error during initialization
+    return <p>Failed to open HDF5 file. Check the H5Web output channel for details.</p>;
   }
 
   return (
@@ -52,8 +46,10 @@ function App() {
         <p>{error instanceof Error ? error.message : 'Unknown error'}</p>
       )}
     >
-      <Suspense fallback={<>Loading...</>}>
-        <Viewer fileInfo={fileInfo} />
+      <Suspense fallback={<p>Loading HDF5 file structure...</p>}>
+        <RemoteProvider key={revision} filepath={fileInfo.name}>
+          <H5WebApp />
+        </RemoteProvider>
       </Suspense>
     </ErrorBoundary>
   );

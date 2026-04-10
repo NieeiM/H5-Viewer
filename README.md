@@ -1,70 +1,86 @@
-# [H5Web](https://h5web.panosc.eu/) for Visual Studio Code
+# H5 Viewer
 
-Explore and visualise **HDF5 files** directly in Visual Studio Code with
-[H5Web](https://h5web.panosc.eu/) and its `H5WasmProvider`.
+**Visualize HDF5 files directly in VS Code** — optimized for Remote SSH with on-demand data loading.
 
-![GIF recording](./assets/vscode-h5web.gif)
+[Chinese / 中文文档](./README.zh-CN.md)
 
-## Supported HDF5 file extensions
+![Demo](./assets/vscode-h5web.gif)
 
-Out of the box, the H5Web viewer is configured as the default editor for the
-following file extensions: `.h5`, `.hdf`, `.hdf5`, `hf5`, `.nx`
-([NeXus](https://manual.nexusformat.org/index.html)), `.nxs`, `.nx5`, `.nexus`,
-`.cxi`
-([Coherent X-ray Imaging](https://raw.githubusercontent.com/cxidb/CXI/master/cxi_file_format.pdf)),
-`.nc` ([netCDF4](https://docs.unidata.ucar.edu/nug/current/)), `.nc4`,
-[`.loom`](http://linnarssonlab.org/loompy/format/),
-[`.jld2`](https://github.com/JuliaIO/JLD2.jl),
-[`.h5ebsd`](https://link.springer.com/article/10.1186/2193-9772-3-4), `.edaxh5`,
-`.oh5`,
-[`.dream3d`](https://dream3d.bluequartz.net/Help/3_SupportedFileFormats/Native_DREAM3D_File_Format/),
-[`.geoh5`](https://mirageoscience-geoh5py.readthedocs-hosted.com/en/v0.8.0/content/geoh5_format/index.html),
-[`.h5oina`](https://github.com/oinanoanalysis/h5oina),
-[`.h5ad`](https://anndata.readthedocs.io/en/latest/index.html).
+## Key Features
 
-To add more extensions, don't hesitate to
-[open an issue](https://github.com/silx-kit/vscode-h5web/issues/new) or
-[a pull request](https://github.com/silx-kit/vscode-h5web/pulls). Alternatively,
-you can use VS Code's `workbench.editorAssociations` setting to set H5Web as the
-default editor for additional extensions:
+- **Line plots** — 1D datasets with error bars, auxiliary signals, and CSV export
+- **Heatmaps** — 2D datasets with multiple colormaps, complex number support, and axis controls
+- **Tables** — Matrix view for numerical and compound datasets
+- **RGB images** — Direct visualization of RGB datasets
+- **3D slicing** — Navigate slices of 3D+ datasets interactively
+- **NeXus support** — Automatic interpretation of NXdata groups and axes
+- **Metadata inspector** — Attributes, chunk layout, compression filters, and data types
+- **Search** — Find entities across the entire file tree
 
-```json
-"workbench.editorAssociations": {
-  "*.foo": "h5web.viewer",
-},
-```
+## Remote Optimization
 
-You can also open any file in H5Web with **right click -> Open with... -> H5Web
-(any extension)**, or, if you've already opened the file, by invoking **View:
-Reopen Editor With...** from the command palette:
+This is a fork of [vscode-h5web](https://github.com/silx-kit/vscode-h5web) with a redesigned architecture for remote development.
 
-![GIF recording](./assets/vscode-openwith.gif)
+### The Problem
 
-Note that some of the extensions configured to open with H5Web are not
-guaranteed to map to HDF5 files. For instance, the `.nc` extension is also used
-for netCDF3 files, which are **not** based on HDF5 and are therefore not
-compatible with H5Web. If this is an issue, you can use the
-`workbench.editorAssociations` to restore the default editor association as
-follows:
+The original extension transfers **the entire HDF5 file** from the remote server to the local browser for parsing. A 500 MB file means 500 MB of network transfer before anything renders. Files over 2 GB cannot be opened at all.
+
+### The Solution
+
+H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host) and sends only the requested data slices to the local webview via VS Code's message passing. The file never leaves the server.
+
+| | Original | H5 Viewer |
+|---|---|---|
+| Open a 500 MB file | Transfer 500 MB, then parse | Parse on server, transfer ~10 KB metadata |
+| Switch dataset | Instant (in memory) | RPC request (~ms latency) |
+| File size limit | 2 GB | **None** |
+| Remote experience | Slow | Fast |
+
+## Supported File Extensions
+
+The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+
+For other extensions, right-click the file and select **Open With... > H5 Viewer (any extension)**.
+
+To set H5 Viewer as default for additional extensions:
 
 ```json
 "workbench.editorAssociations": {
-  "*.nc": "default",
-},
+  "*.foo": "h5viewer.viewer"
+}
 ```
 
-## Supported HDF5 compression plugins
+## Compression Plugins
 
-The extension supports reading datasets compressed with any of the plugins
-available in
-[h5wasm-plugins@0.2.1](https://github.com/h5wasm/h5wasm-plugins/tree/v0.2.1?tab=readme-ov-file#included-plugins).
+Supported HDF5 compression filters: **Blosc**, **Blosc2**, **Bitshuffle**, **BZIP2**, **JPEG**, **LZ4**, **LZF**, **ZFP**, **Zstandard**.
 
-## Known limitations
+Plugins are loaded automatically on the server side — no configuration needed.
 
-This extension uses [h5wasm](https://github.com/usnistgov/h5wasm) to read HDF5
-files and therefore suffers from the following limitations:
+## Platform Support
 
-- Files bigger than 2GB cannot be opened automatically from the VS Code
-  Explorer. You will need to browse for them manually from the H5Web webview
-  editor when requested.
-- External links cannot be resolved.
+The extension is fully cross-platform. Both the HDF5 parser and compression plugins are compiled to WebAssembly, so a single package works on **x86_64** and **ARM64** (Linux, macOS, Windows).
+
+## Architecture
+
+```
+Remote Server                          Local Machine
+┌──────────────────────┐              ┌──────────────────────┐
+│  Extension Host      │              │  Webview (Browser)   │
+│  (Node.js)           │              │                      │
+│                      │  postMessage │                      │
+│  h5wasm ──> HDF5     │ <── request  │  DataProvider        │
+│  (reads disk         │ ──> response │    getEntity()       │
+│   directly)          │  (data slice)│    getValue()        │
+│                      │              │                      │
+│  Compression plugins │              │  @h5web/app renders  │
+│  loaded locally      │              │  visualizations      │
+└──────────────────────┘              └──────────────────────┘
+```
+
+## Credits
+
+Built on top of [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.com/usnistgov/h5wasm) by ESRF (European Synchrotron Radiation Facility).
+
+## License
+
+MIT
