@@ -39,9 +39,19 @@ H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host
 | File size limit | 2 GB | **None** |
 | Remote experience | Slow | Fast |
 
+## MATLAB .mat File Support
+
+| MAT Version | Support | Notes |
+|---|---|---|
+| **v7.3** | Full (on-demand loading) | HDF5-based, same fast experience as .h5 files |
+| **v5 / v7** | Full (loads entire file) | Legacy binary format, parsed with mat-for-js |
+| **v4** | Not supported | Prompt to resave as v7.3 |
+
+For MAT v5/v7 files, a banner reminds you that the entire file is loaded into memory. For large files, resave in MATLAB with `save('file.mat', '-v7.3')` for better performance.
+
 ## Supported File Extensions
 
-The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
 
 For other extensions, right-click the file and select **Open With... > H5 Viewer (any extension)**.
 
@@ -104,4 +114,4 @@ Built on top of [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.co
 
 ## License
 
-MIT
+GPL-3.0 (due to mat-for-js dependency)

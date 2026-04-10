@@ -20,6 +20,9 @@ importers:
       h5wasm-plugins:
         specifier: 0.2.0
         version: 0.2.0
+      mat-for-js:
+        specifier: 1.1.0
+        version: 1.1.0
       normalize.css:
         specifier: 8.0.1
         version: 8.0.1
@@ -2186,6 +2189,9 @@ packages:
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
+  mat-for-js@1.1.0:
+    resolution: {integrity: sha512-2yZygGgHUnz7eM9OD3io+J9fzXNCe4wXwIAfSV7rwvH9ZoKip4vpfOkwJBYmbJ+ntzgsJfcAK0ONBJCEf0v3FQ==}
+
   math-expression-evaluator@1.4.0:
     resolution: {integrity: sha512-4vRUvPyxdO8cWULGTh9dZWL2tZK6LDBvj+OGHBER7poH9Qdt7kXEoj20wiz4lQUbUXQZFjPbe5mVDo9nutizCw==}
 
@@ -2297,6 +2303,9 @@ packages:
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
+
+  pako@1.0.11:
+    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -5134,6 +5143,10 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  mat-for-js@1.1.0:
+    dependencies:
+      pako: 1.0.11
+
   math-expression-evaluator@1.4.0: {}
 
   math-intrinsics@1.1.0: {}
@@ -5254,6 +5267,8 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  pako@1.0.11: {}
 
   parent-module@1.0.1:
     dependencies:

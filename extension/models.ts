@@ -1,6 +1,6 @@
 import { type ExportFormat } from '@h5web/app';
 
-// ---- Legacy messages (kept for export and lifecycle) ----
+// ---- Message types ----
 
 export enum MessageType {
   Ready = 'Ready',
@@ -9,11 +9,20 @@ export enum MessageType {
   RpcRequest = 'RpcRequest',
   RpcResponse = 'RpcResponse',
   FileChanged = 'FileChanged',
+  LoadingProgress = 'LoadingProgress',
 }
 
 export interface FileInfo {
   name: string;
   size: number;
+  format?: 'hdf5' | 'mat-v5' | 'mat-v7' | 'mat-v73';
+  errorMessage?: string;
+}
+
+export interface LoadingProgress {
+  message: string;
+  /** 0-100, or -1 for indeterminate */
+  percent: number;
 }
 
 export interface Export {
@@ -50,4 +59,5 @@ export type Message =
   | { type: MessageType.Export; data: Export }
   | { type: MessageType.RpcRequest; data: RpcRequest }
   | { type: MessageType.RpcResponse; data: RpcResponse }
-  | { type: MessageType.FileChanged };
+  | { type: MessageType.FileChanged }
+  | { type: MessageType.LoadingProgress; data: LoadingProgress };

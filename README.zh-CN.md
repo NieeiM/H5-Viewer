@@ -39,9 +39,19 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 | 文件大小限制 | 2 GB | **无限制** |
 | 远程体验 | 慢 | 快 |
 
+## MATLAB .mat 文件支持
+
+| MAT 版本 | 支持情况 | 说明 |
+|---|---|---|
+| **v7.3** | 完整支持（按需加载） | 基于 HDF5，与 .h5 文件体验一致 |
+| **v5 / v7** | 完整支持（全量加载） | 传统二进制格式，使用 mat-for-js 解析 |
+| **v4** | 不支持 | 提示用户用 v7.3 格式重新保存 |
+
+对于 MAT v5/v7 文件，界面顶部会显示提示横幅，说明文件已全量加载到内存。对于大文件，建议在 MATLAB 中用 `save('file.mat', '-v7.3')` 重新保存以获得更好的性能。
+
 ## 支持的文件扩展名
 
-自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
+自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
 
 其他扩展名可右键文件选择 **打开方式... > H5 Viewer (any extension)**。
 
@@ -104,4 +114,4 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 ## 许可证
 
-MIT
+GPL-3.0（因 mat-for-js 依赖）

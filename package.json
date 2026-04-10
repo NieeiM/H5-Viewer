@@ -3,8 +3,8 @@
   "displayName": "H5 Viewer",
   "publisher": "meijiahao",
   "description": "Visualize HDF5 files in VS Code with optimized remote support",
-  "version": "1.0.2",
-  "license": "MIT",
+  "version": "1.1.1",
+  "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {
     "type": "git",
@@ -34,7 +34,7 @@
         "displayName": "H5 Viewer",
         "selector": [
           {
-            "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad}"
+            "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad,mat}"
           }
         ],
         "priority": "default"
@@ -70,6 +70,7 @@
     "@react-hookz/web": "25.1.1",
     "h5wasm": "0.8.7",
     "h5wasm-plugins": "0.2.0",
+    "mat-for-js": "1.1.0",
     "normalize.css": "8.0.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",

@@ -333,6 +333,18 @@ type H5WasmModule = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type H5WasmClass = any;
 
+export interface Logger {
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void;
+  trace(message: string, ...args: unknown[]): void;
+}
+
+const noopLogger: Logger = {
+  info() {}, warn() {}, error() {}, debug() {}, trace() {},
+};
+
 export class H5Service {
   private h5wasm: H5WasmModule = null;
   private DatasetClass: H5WasmClass = null;
@@ -340,6 +352,11 @@ export class H5Service {
   private fileId: bigint | null = null;
   private loadedPlugins = new Set<string>();
   private pluginsDir: string | null = null;
+  private log: Logger;
+
+  constructor(logger?: Logger) {
+    this.log = logger || noopLogger;
+  }
 
   /**
    * Initialize h5wasm/node and open the file.
@@ -348,6 +365,8 @@ export class H5Service {
     filePath: string,
     extensionPath: string,
   ): Promise<void> {
+    const t0 = performance.now();
+    this.log.info(`[H5Service] Initializing for: ${filePath}`);
     // Workaround for Electron/VS Code environment detection issue in h5wasm
     const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
     if (nav?.configurable) {
@@ -366,6 +385,7 @@ export class H5Service {
         Object.defineProperty(globalThis, 'navigator', nav);
       }
     }
+    this.log.debug(`[H5Service] h5wasm WASM module ready (${(performance.now() - t0).toFixed(0)} ms)`);
 
     // Store class constructors for later use
     this.DatasetClass = h5wasmPkg.Dataset;
@@ -393,12 +413,15 @@ export class H5Service {
       this.h5wasm.H5F_ACC_RDONLY,
       false,
     );
+
+    this.log.info(`[H5Service] File opened in ${(performance.now() - t0).toFixed(0)} ms, plugins loaded: [${[...this.loadedPlugins].join(', ')}]`);
   }
 
   /**
    * Close the HDF5 file and release resources.
    */
   close(): void {
+    this.log.info('[H5Service] Closing file');
     if (this.fileId !== null && this.h5wasm) {
       try {
         this.h5wasm.close_file(this.fileId);
@@ -411,9 +434,9 @@ export class H5Service {
     // Clean up temp plugins directory
     if (this.pluginsDir) {
       try {
-        // Remove the parent temp dir (e.g. /tmp/h5viewer-XXXXX/)
         const tmpBase = join(this.pluginsDir, '..');
         rmSync(tmpBase, { recursive: true });
+        this.log.debug('[H5Service] Cleaned up temp plugins dir');
       } catch {
         // Best-effort cleanup
       }
@@ -425,12 +448,15 @@ export class H5Service {
    * Reopen the file (e.g., after file change on disk).
    */
   async reopen(filePath: string): Promise<void> {
+    const t0 = performance.now();
+    this.log.info(`[H5Service] Reopening file: ${filePath}`);
     this.close();
     this.fileId = this.h5wasm.open(
       filePath,
       this.h5wasm.H5F_ACC_RDONLY,
       false,
     );
+    this.log.info(`[H5Service] Reopened in ${(performance.now() - t0).toFixed(0)} ms`);
   }
 
   /**
@@ -645,7 +671,7 @@ export class H5Service {
         if (pluginName && !this.loadedPlugins.has(pluginName)) {
           const pluginPath = join(this.pluginsDir, `libH5Z${pluginName}.so`);
           if (!existsSync(pluginPath)) {
-            console.warn(
+            this.log.warn(
               `[H5Service] Plugin ${pluginName} not available for filter ${f.name}`,
             );
           }
@@ -674,8 +700,9 @@ export class H5Service {
 
         copyFileSync(srcPath, destPath);
         this.loadedPlugins.add(name);
+        this.log.debug(`[H5Service] Loaded plugin: ${name}`);
       } catch (err) {
-        console.warn(`[H5Service] Failed to load plugin ${name}:`, err);
+        this.log.warn(`[H5Service] Failed to load plugin ${name}:`, err);
       }
     }
   }

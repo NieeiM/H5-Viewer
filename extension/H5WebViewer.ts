@@ -1,5 +1,5 @@
 import { readFileSync, statSync, unwatchFile, watchFile, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 
 import { type Manifest } from 'vite';
 import {
@@ -14,8 +14,32 @@ import {
   window,
 } from 'vscode';
 
-import { H5Service } from './h5-service.js';
-import { type Message, MessageType, type RpcRequest } from './models.js';
+import { H5Service, type Logger } from './h5-service.js';
+import { MatService } from './mat-service.js';
+import { detectMatVersion, isHdf5File, type MatVersion } from './mat-version.js';
+import { type FileInfo, type Message, MessageType, type RpcRequest } from './models.js';
+
+/** Rough estimate of JSON-serialized size for logging */
+function estimateSize(value: unknown): string {
+  try {
+    const json = JSON.stringify(value);
+    const bytes = json ? json.length : 0;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  } catch {
+    return '? B';
+  }
+}
+
+/** Unified service interface (both H5Service and MatService implement these) */
+interface DataService {
+  getEntity(path: string): unknown;
+  getValue(path: string, selection?: string): unknown;
+  getAttrValues(path: string): Record<string, unknown>;
+  getSearchablePaths(rootPath: string): string[];
+  close(): void;
+}
 
 export default class H5WebViewer implements CustomReadonlyEditorProvider {
   public constructor(
@@ -47,9 +71,25 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     // eslint-disable-next-line require-atomic-updates
     webview.html = await this.getHtmlForWebview(webview);
 
-    // Create H5Service for this file
-    const h5service = new H5Service();
+    let service: DataService | null = null;
     let serviceReady = false;
+    let rpcCount = 0;
+
+    // Create a logger that wraps the VS Code LogOutputChannel
+    const logger: Logger = {
+      info: (msg, ...args) => this.outputChannel.info(msg, ...args),
+      warn: (msg, ...args) => this.outputChannel.warn(msg, ...args),
+      error: (msg, ...args) => this.outputChannel.error(msg, ...args),
+      debug: (msg, ...args) => this.outputChannel.debug(msg, ...args),
+      trace: (msg, ...args) => this.outputChannel.trace(msg, ...args),
+    };
+
+    const sendProgress = (message: string, percent = -1) => {
+      webview.postMessage({
+        type: MessageType.LoadingProgress,
+        data: { message, percent },
+      });
+    };
 
     webview.onDidReceiveMessage(async (evt: Message) => {
       // ---- Ready message ----
@@ -58,23 +98,36 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
           const filePath = document.uri.fsPath;
           const name = basename(filePath);
           const { size } = statSync(filePath);
+          const ext = extname(filePath).toLowerCase();
 
-          // Initialize h5wasm/node and open the file on the server side
-          await h5service.init(filePath, this.context.extensionPath);
+          // Determine file format and initialize appropriate service
+          const { fileInfo, dataService } = await this.initService(
+            filePath, name, size, ext, sendProgress, logger,
+          );
+
+          if (fileInfo.errorMessage) {
+            // Unsupported format — send error to webview
+            webview.postMessage({ type: MessageType.FileInfo, data: fileInfo });
+            return;
+          }
+
+          service = dataService!;
           serviceReady = true;
 
-          this.outputChannel.info(`Opened HDF5 file: ${name} (${size} bytes)`);
+          this.outputChannel.info(
+            `Opened file: ${name} (${(size / 1024 / 1024).toFixed(1)} MB, format: ${fileInfo.format})`,
+          );
 
-          // Send file info to webview (no URI needed — data loaded via RPC)
-          webview.postMessage({
-            type: MessageType.FileInfo,
-            data: { name, size },
-          });
+          webview.postMessage({ type: MessageType.FileInfo, data: fileInfo });
 
           // Watch for file changes on disk
           watchFile(filePath, async () => {
             try {
-              await h5service.reopen(filePath);
+              if (service instanceof H5Service) {
+                await service.reopen(filePath);
+              }
+              // For MAT files, we'd need to re-parse the entire file
+              // which is expensive. Just notify the webview.
               webview.postMessage({ type: MessageType.FileChanged });
             } catch (err) {
               this.outputChannel.warn(
@@ -86,11 +139,12 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
 
           webviewPanel.onDidDispose(() => {
             unwatchFile(filePath);
-            h5service.close();
+            service?.close();
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'unknown error';
-          this.outputChannel.error('Failed to initialize H5Service:', msg);
+          this.outputChannel.error('Failed to initialize service:', msg);
+          sendProgress(`Error: ${msg}`, -1);
         }
 
         return;
@@ -99,11 +153,20 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       // ---- RPC request messages ----
       if (evt.type === MessageType.RpcRequest) {
         const { id, method, params } = evt.data as RpcRequest;
+        const rpcId = ++rpcCount;
+        const t0 = performance.now();
 
-        if (!serviceReady) {
+        const paramSummary = method === 'getValue'
+          ? `path=${params.path}, selection=${params.selection ?? 'full'}`
+          : `path=${params.path}`;
+
+        this.outputChannel.debug(`[RPC #${rpcId}] → ${method}(${paramSummary})`);
+
+        if (!serviceReady || !service) {
+          this.outputChannel.warn(`[RPC #${rpcId}] Service not ready, rejecting`);
           webview.postMessage({
             type: MessageType.RpcResponse,
-            data: { id, error: 'H5Service not ready yet' },
+            data: { id, error: 'Service not ready yet' },
           });
           return;
         }
@@ -113,23 +176,27 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
 
           switch (method) {
             case 'getEntity':
-              result = h5service.getEntity(params.path as string);
+              result = service.getEntity(params.path as string);
               break;
             case 'getValue':
-              result = h5service.getValue(
+              result = service.getValue(
                 params.path as string,
                 params.selection as string | undefined,
               );
               break;
             case 'getAttrValues':
-              result = h5service.getAttrValues(params.path as string);
+              result = service.getAttrValues(params.path as string);
               break;
             case 'getSearchablePaths':
-              result = h5service.getSearchablePaths(params.path as string);
+              result = service.getSearchablePaths(params.path as string);
               break;
             default:
               throw new Error(`Unknown RPC method: ${method}`);
           }
+
+          const elapsed = (performance.now() - t0).toFixed(1);
+          const size = estimateSize(result);
+          this.outputChannel.debug(`[RPC #${rpcId}] ← ${method} OK (${elapsed} ms, ~${size})`);
 
           webview.postMessage({
             type: MessageType.RpcResponse,
@@ -138,7 +205,8 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
         } catch (err) {
           const errorMsg =
             err instanceof Error ? err.message : 'Unknown error';
-          this.outputChannel.warn(`RPC ${method} error:`, errorMsg);
+          const elapsed = (performance.now() - t0).toFixed(1);
+          this.outputChannel.warn(`[RPC #${rpcId}] ← ${method} ERROR (${elapsed} ms): ${errorMsg}`);
           webview.postMessage({
             type: MessageType.RpcResponse,
             data: { id, error: errorMsg },
@@ -163,8 +231,6 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
 
         if (saveUri) {
           writeFileSync(saveUri.fsPath, payload);
-
-          // Open output file in separate editor
           commands.executeCommand('workbench.action.keepEditor');
 
           try {
@@ -179,6 +245,110 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       }
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Format detection + service initialization
+  // ---------------------------------------------------------------------------
+
+  private async initService(
+    filePath: string,
+    name: string,
+    size: number,
+    ext: string,
+    sendProgress: (message: string, percent?: number) => void,
+    logger: Logger,
+  ): Promise<{ fileInfo: FileInfo; dataService?: DataService }> {
+    // .mat files need version detection
+    if (ext === '.mat') {
+      return this.initMatService(filePath, name, size, sendProgress, logger);
+    }
+
+    // All other extensions: try HDF5 first
+    // (some extensions like .nc might not actually be HDF5)
+    try {
+      if (!isHdf5File(filePath)) {
+        return {
+          fileInfo: {
+            name, size,
+            errorMessage: `This file does not appear to be a valid HDF5 file. ` +
+              `The extension "${ext}" was expected to be HDF5-based, but the file ` +
+              `header does not contain the HDF5 signature.`,
+          },
+        };
+      }
+    } catch {
+      // If we can't read the header, try opening anyway
+    }
+
+    sendProgress('Initializing HDF5 reader...');
+    const h5service = new H5Service(logger);
+    await h5service.init(filePath, this.context.extensionPath);
+
+    return {
+      fileInfo: { name, size, format: 'hdf5' },
+      dataService: h5service,
+    };
+  }
+
+  private async initMatService(
+    filePath: string,
+    name: string,
+    size: number,
+    sendProgress: (message: string, percent?: number) => void,
+    logger: Logger,
+  ): Promise<{ fileInfo: FileInfo; dataService?: DataService }> {
+    sendProgress('Detecting MAT file version...');
+
+    const version = detectMatVersion(filePath);
+    this.outputChannel.info(`MAT version detected: ${version} for ${name}`);
+
+    // v7.3 = HDF5, use H5Service
+    if (version === 'v7.3') {
+      sendProgress('Opening MAT v7.3 (HDF5) file...');
+      const h5service = new H5Service(logger);
+      await h5service.init(filePath, this.context.extensionPath);
+      return {
+        fileInfo: { name, size, format: 'mat-v73' },
+        dataService: h5service,
+      };
+    }
+
+    // v5 / v7: use MatService (full file load)
+    if (version === 'v5' || version === 'v7') {
+      const sizeMB = (size / 1024 / 1024).toFixed(1);
+
+      const matService = new MatService(logger);
+      await matService.init(filePath, version, (msg) => {
+        sendProgress(msg);
+      });
+
+      return {
+        fileInfo: { name, size, format: version === 'v5' ? 'mat-v5' : 'mat-v7' },
+        dataService: matService,
+      };
+    }
+
+    // v4 or unknown: not supported
+    const versionLabel = version === 'v4' ? 'MAT v4' : `unrecognized format (${version})`;
+    return {
+      fileInfo: {
+        name,
+        size,
+        errorMessage:
+          `This file uses ${versionLabel}, which is not supported.\n\n` +
+          `Supported MAT versions:\n` +
+          `  - MAT v7.3 (HDF5-based) — full support\n` +
+          `  - MAT v5 / v7 — full support (loaded into memory)\n\n` +
+          `To convert, open the file in MATLAB and resave:\n` +
+          `  load('${name}');\n` +
+          `  save('${name}', '-v7.3');`,
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // HTML generation
+  // ---------------------------------------------------------------------------
 
   private async getHtmlForWebview(webview: Webview): Promise<string> {
     const { extensionPath, extensionUri } = this.context;
@@ -200,8 +370,6 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
     const jsUri = webview.asWebviewUri(jsPathOnDisk);
     const cssUri = webview.asWebviewUri(cssPathOnDisk);
 
-    // Plugins are now loaded in the extension host (Node.js side),
-    // so no plugins script tag or connect-src needed.
     const cspRules = [
       "default-src 'none'",
       `script-src ${cspSource} 'unsafe-eval'`,
