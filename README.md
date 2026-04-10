@@ -49,9 +49,18 @@ H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host
 
 For MAT v5/v7 files, a banner reminds you that the entire file is loaded into memory. For large files, resave in MATLAB with `save('file.mat', '-v7.3')` for better performance.
 
+## EEG .cnt File Support
+
+| Format | Support | Notes |
+|---|---|---|
+| **Neuroscan CNT** | Full (on-demand loading) | Binary format from SCAN/SynAmps/NuAmps systems. Random access, no file size limit |
+| **ANT Neuro CNT** | Full (epoch-based loading) | RIFF container with RAW3 compression from eego/waveguard systems. Decompressed per-epoch |
+
+Format is auto-detected from the file header. Each EEG channel is exposed as a 1D dataset (physical values in µV). Events/triggers are listed under `/events`.
+
 ## Supported File Extensions
 
-The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
 
 For other extensions, right-click the file and select **Open With... > H5 Viewer (any extension)**.
 

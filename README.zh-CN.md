@@ -49,9 +49,18 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 
 对于 MAT v5/v7 文件，界面顶部会显示提示横幅，说明文件已全量加载到内存。对于大文件，建议在 MATLAB 中用 `save('file.mat', '-v7.3')` 重新保存以获得更好的性能。
 
+## 脑电 .cnt 文件支持
+
+| 格式 | 支持情况 | 说明 |
+|---|---|---|
+| **Neuroscan CNT** | 完整支持（按需加载） | SCAN/SynAmps/NuAmps 系统的二进制格式。随机访问，无文件大小限制 |
+| **ANT Neuro CNT** | 完整支持（按 epoch 加载） | eego/waveguard 系统的 RIFF 容器 + RAW3 压缩格式。按 epoch 解压 |
+
+格式从文件头自动检测。每个 EEG 通道作为 1D 数据集展示（物理值，单位 µV）。事件/触发器列在 `/events` 下。
+
 ## 支持的文件扩展名
 
-自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
+自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
 
 其他扩展名可右键文件选择 **打开方式... > H5 Viewer (any extension)**。
 

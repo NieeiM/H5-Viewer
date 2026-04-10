@@ -15,7 +15,7 @@ export enum MessageType {
 export interface FileInfo {
   name: string;
   size: number;
-  format?: 'hdf5' | 'mat-v5' | 'mat-v7' | 'mat-v73';
+  format?: 'hdf5' | 'mat-v5' | 'mat-v7' | 'mat-v73' | 'cnt-neuroscan' | 'cnt-ant';
   errorMessage?: string;
 }
 

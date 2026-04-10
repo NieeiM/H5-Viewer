@@ -14,6 +14,7 @@ import {
   window,
 } from 'vscode';
 
+import { CntService } from './cnt-service.js';
 import { H5Service, type Logger } from './h5-service.js';
 import { MatService } from './mat-service.js';
 import { detectMatVersion, isHdf5File, type MatVersion } from './mat-version.js';
@@ -263,6 +264,11 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       return this.initMatService(filePath, name, size, sendProgress, logger);
     }
 
+    // .cnt files: auto-detect Neuroscan vs ANT Neuro
+    if (ext === '.cnt') {
+      return this.initCntService(filePath, name, size, sendProgress, logger);
+    }
+
     // All other extensions: try HDF5 first
     // (some extensions like .nc might not actually be HDF5)
     try {
@@ -343,6 +349,25 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
           `  load('${name}');\n` +
           `  save('${name}', '-v7.3');`,
       },
+    };
+  }
+
+  private async initCntService(
+    filePath: string,
+    name: string,
+    size: number,
+    sendProgress: (message: string, percent?: number) => void,
+    logger: Logger,
+  ): Promise<{ fileInfo: FileInfo; dataService?: DataService }> {
+    const cntService = new CntService(logger);
+    const format = await cntService.init(filePath, (msg) => {
+      sendProgress(msg);
+    });
+
+    const formatLabel = format === 'neuroscan' ? 'cnt-neuroscan' : 'cnt-ant';
+    return {
+      fileInfo: { name, size, format: formatLabel as FileInfo['format'] },
+      dataService: cntService,
     };
   }
 

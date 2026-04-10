@@ -17,6 +17,8 @@ const FORMAT_LABELS: Record<string, string> = {
   'mat-v73': 'MAT v7.3 (HDF5)',
   'mat-v5': 'MAT v5',
   'mat-v7': 'MAT v7',
+  'cnt-neuroscan': 'Neuroscan CNT',
+  'cnt-ant': 'ANT Neuro CNT',
 };
 
 function App() {
