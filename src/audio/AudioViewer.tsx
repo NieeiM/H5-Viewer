@@ -1,9 +1,8 @@
 /**
- * Full-screen audio viewer for a single dataset.
- * Displays playback controls, waveform, and spectrogram.
+ * Audio viewer — replaces @h5web/app's right panel when an audio dataset is selected.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { RpcClient } from '../remote-api';
 import AudioPlayer from './AudioPlayer';
@@ -12,25 +11,25 @@ import Spectrogram from './Spectrogram';
 
 interface Props {
   rpc: RpcClient;
-  /** HDF5 path to the audio dataset */
   path: string;
-  /** Display name */
   name: string;
+  onBack: () => void;
 }
 
-// TypedArray reconstruction
 function deserializeTypedArray(obj: Record<string, unknown>): Float32Array | null {
   if (obj.__typedArray !== true) return null;
-  const data = obj.data as number[];
-  return new Float32Array(data);
+  return new Float32Array(obj.data as number[]);
 }
 
-export default function AudioViewer({ rpc, path, name }: Props) {
+export default function AudioViewer({ rpc, path, name, onBack }: Props) {
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
+  const playerRef = useRef<{ seek: (t: number) => void; toggle: () => void } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Load audio data
   useEffect(() => {
     setLoading(true);
     setError('');
@@ -41,157 +40,105 @@ export default function AudioViewer({ rpc, path, name }: Props) {
 
       if (res.type === 'encoded') {
         const bytes = new Uint8Array(res.data as number[]);
+        const ctx = new AudioContext();
         try {
-          const ctx = new AudioContext();
-          const buffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-          setAudioBuffer(buffer);
-          ctx.close();
+          const buf = await ctx.decodeAudioData(bytes.buffer.slice(0));
+          setAudioBuffer(buf);
         } catch (e) {
-          setError(`Failed to decode audio: ${e instanceof Error ? e.message : 'unknown error'}`);
+          setError(`Failed to decode: ${e instanceof Error ? e.message : 'unknown'}`);
+        } finally {
+          ctx.close();
         }
       } else if (res.type === 'pcm') {
-        const sampleRate = (res.sampleRate as number) || 44100;
-        const numChannels = (res.numChannels as number) || 1;
-        const numSamples = (res.numSamples as number) || 0;
-        const channelFirst = res.channelFirst as boolean;
-
-        const rawData = res.data as Record<string, unknown>;
-        let flat: Float32Array;
-        const deserialized = deserializeTypedArray(rawData);
-        if (deserialized) {
-          flat = deserialized;
-        } else if (Array.isArray(rawData)) {
-          flat = new Float32Array(rawData as number[]);
-        } else {
-          setError('Unexpected PCM data format');
-          return;
-        }
+        const sr = (res.sampleRate as number) || 44100;
+        const nch = (res.numChannels as number) || 1;
+        const ns = (res.numSamples as number) || 0;
+        const chFirst = res.channelFirst as boolean;
+        const raw = res.data as Record<string, unknown>;
+        const flat = deserializeTypedArray(raw) || new Float32Array(Array.isArray(raw) ? raw as number[] : []);
 
         try {
-          const ctx = new AudioContext({ sampleRate });
-          const buffer = ctx.createBuffer(numChannels, numSamples, sampleRate);
-
-          if (numChannels === 1) {
-            buffer.copyToChannel(new Float32Array(flat), 0);
-          } else if (channelFirst) {
-            for (let ch = 0; ch < numChannels; ch++) {
-              const chData = flat.slice(ch * numSamples, (ch + 1) * numSamples);
-              buffer.copyToChannel(chData, ch);
-            }
+          const ctx = new AudioContext({ sampleRate: sr });
+          const buf = ctx.createBuffer(nch, ns, sr);
+          if (nch === 1) {
+            buf.copyToChannel(new Float32Array(flat), 0);
+          } else if (chFirst) {
+            for (let ch = 0; ch < nch; ch++) buf.copyToChannel(flat.slice(ch * ns, (ch + 1) * ns), ch);
           } else {
-            for (let ch = 0; ch < numChannels; ch++) {
-              const chData = new Float32Array(numSamples);
-              for (let s = 0; s < numSamples; s++) {
-                chData[s] = flat[s * numChannels + ch];
-              }
-              buffer.copyToChannel(chData, ch);
+            for (let ch = 0; ch < nch; ch++) {
+              const d = new Float32Array(ns);
+              for (let s = 0; s < ns; s++) d[s] = flat[s * nch + ch];
+              buf.copyToChannel(d, ch);
             }
           }
-
-          setAudioBuffer(buffer);
+          setAudioBuffer(buf);
           ctx.close();
         } catch (e) {
-          setError(`Failed to create AudioBuffer: ${e instanceof Error ? e.message : 'unknown error'}`);
+          setError(`Failed to create AudioBuffer: ${e instanceof Error ? e.message : 'unknown'}`);
         }
       }
     }).catch((e) => {
-      setError(`Failed to load audio: ${e instanceof Error ? e.message : 'unknown error'}`);
-    }).finally(() => {
-      setLoading(false);
-    });
+      setError(`Failed to load: ${e instanceof Error ? e.message : 'unknown'}`);
+    }).finally(() => setLoading(false));
   }, [rpc, path]);
 
-  const handleTimeUpdate = useCallback((time: number) => {
-    setCurrentTime(time);
+  // Keyboard shortcuts
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        playerRef.current?.toggle();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setCurrentTime((t) => { const nt = Math.max(0, t - 5); playerRef.current?.seek(nt); return nt; });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const dur = audioBuffer?.duration || 0;
+        setCurrentTime((t) => { const nt = Math.min(dur, t + 5); playerRef.current?.seek(nt); return nt; });
+      } else if (e.key === 'Escape') {
+        onBack();
+      }
+    };
+    el.addEventListener('keydown', onKey);
+    return () => el.removeEventListener('keydown', onKey);
+  }, [audioBuffer, onBack]);
+
+  const handleTimeUpdate = useCallback((t: number) => setCurrentTime(t), []);
+
+  const handleSeekFromViz = useCallback((t: number) => {
+    setCurrentTime(t);
+    playerRef.current?.seek(t);
   }, []);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <span style={styles.icon}>♪</span>
-        <span style={styles.title}>{name}</span>
-        <span style={styles.pathLabel}>{path}</span>
+    <div className="h5v-overlay-inner" ref={containerRef} tabIndex={-1} style={{ outline: 'none' }}>
+      {/* Header with back button */}
+      <div className="h5v-panel-header">
+        <button className="h5v-back-btn" onClick={onBack}>← Back</button>
+        <span style={{ fontSize: 16, color: 'var(--vscode-progressBar-background, #4ec9b0)' }}>♪</span>
+        <span className="h5v-panel-title">{name}</span>
+        <span className="h5v-panel-path">{path}</span>
       </div>
 
-      {error && <div style={styles.error}>{error}</div>}
-
-      {loading && (
-        <div style={styles.loading}>
-          <div style={styles.spinner} />
-          <span>Loading audio data...</span>
-        </div>
-      )}
+      {error && <div className="h5v-panel-error">{error}</div>}
+      {loading && <div className="h5v-panel-loading"><div className="h5v-spinner" /><span>Loading audio...</span></div>}
 
       {audioBuffer && !loading && (
         <>
-          <AudioPlayer audioBuffer={audioBuffer} onTimeUpdate={handleTimeUpdate} />
-          <div style={styles.vizArea}>
-            <Waveform audioBuffer={audioBuffer} currentTime={currentTime} height={140} />
-            <Spectrogram audioBuffer={audioBuffer} currentTime={currentTime} height={280} />
+          <AudioPlayer audioBuffer={audioBuffer} onTimeUpdate={handleTimeUpdate} ref={playerRef} />
+          <div className="h5v-panel-body">
+            <Waveform audioBuffer={audioBuffer} currentTime={currentTime} onSeek={handleSeekFromViz} />
+            <Spectrogram audioBuffer={audioBuffer} currentTime={currentTime} onSeek={handleSeekFromViz} />
+          </div>
+          <div style={{ padding: '4px 12px', fontSize: 10, color: 'var(--vscode-descriptionForeground, #666)' }}>
+            Space: play/pause · ←/→: seek ±5s · Esc: back · Click waveform/spectrogram to seek
           </div>
         </>
       )}
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    background: '#1e1e1e',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 16px',
-    background: '#252526',
-    borderBottom: '1px solid #3c3c3c',
-    flexShrink: 0,
-  },
-  icon: {
-    fontSize: '16px',
-    color: '#4ec9b0',
-  },
-  title: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#ddd',
-  },
-  pathLabel: {
-    fontSize: '11px',
-    color: '#666',
-    fontFamily: 'monospace',
-    marginLeft: 'auto',
-  },
-  error: {
-    padding: '12px 16px',
-    background: '#3b1111',
-    color: '#f48771',
-    fontSize: '12px',
-  },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: '40px',
-    color: '#888',
-    fontSize: '13px',
-  },
-  spinner: {
-    width: 20,
-    height: 20,
-    border: '2px solid #333',
-    borderTopColor: '#4ec9b0',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  vizArea: {
-    flex: 1,
-    overflow: 'auto',
-  },
-};

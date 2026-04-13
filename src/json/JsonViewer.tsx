@@ -1,6 +1,5 @@
 /**
- * Full-screen JSON viewer for a single dataset.
- * Displays formatted, syntax-highlighted JSON.
+ * JSON viewer — replaces @h5web/app's right panel when a .json dataset is selected.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -9,13 +8,12 @@ import type { RpcClient } from '../remote-api';
 
 interface Props {
   rpc: RpcClient;
-  /** HDF5 path to the JSON dataset */
   path: string;
-  /** Display name */
   name: string;
+  onBack: () => void;
 }
 
-export default function JsonViewer({ rpc, path, name }: Props) {
+export default function JsonViewer({ rpc, path, name, onBack }: Props) {
   const [jsonStr, setJsonStr] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,58 +23,57 @@ export default function JsonViewer({ rpc, path, name }: Props) {
     setLoading(true);
     setError('');
     setJsonStr('');
-
     rpc.call('getJsonData', { path }).then((result) => {
-      const res = result as { json: string; parsed: unknown };
-      setJsonStr(res.json);
+      setJsonStr((result as { json: string }).json);
     }).catch((e) => {
       setError(e instanceof Error ? e.message : 'Failed to load JSON');
-    }).finally(() => {
-      setLoading(false);
-    });
+    }).finally(() => setLoading(false));
   }, [rpc, path]);
 
-  const copyToClipboard = useCallback(() => {
-    navigator.clipboard.writeText(jsonStr).catch(() => {});
-  }, [jsonStr]);
+  const copy = useCallback(() => { navigator.clipboard.writeText(jsonStr).catch(() => {}); }, [jsonStr]);
+
+  // Keyboard: Escape to go back
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onBack(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onBack]);
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <span style={styles.icon}>{ }</span>
-        <span style={styles.title}>{name}</span>
-        <span style={styles.pathLabel}>{path}</span>
+    <div className="h5v-overlay-inner">
+      {/* Header */}
+      <div className="h5v-panel-header">
+        <button className="h5v-back-btn" onClick={onBack}>← Back</button>
+        <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--vscode-symbolIcon-objectForeground, #dcdcaa)' }}>{'{ }'}</span>
+        <span className="h5v-panel-title">{name}</span>
+        <span className="h5v-panel-path">{path}</span>
       </div>
 
-      <div style={styles.toolbar}>
-        <button onClick={copyToClipboard} style={styles.toolBtn}>Copy</button>
-        <label style={styles.wrapLabel}>
-          <input
-            type="checkbox"
-            checked={wordWrap}
-            onChange={(e) => setWordWrap(e.target.checked)}
-          />
-          <span style={{ marginLeft: 4 }}>Word Wrap</span>
+      {/* Toolbar */}
+      <div className="h5v-panel-toolbar">
+        <button className="h5v-tool-btn" onClick={copy}>Copy</button>
+        <label className="h5v-wrap-label">
+          <input type="checkbox" checked={wordWrap} onChange={(e) => setWordWrap(e.target.checked)} />
+          Word Wrap
         </label>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--vscode-descriptionForeground, #666)' }}>
+          Esc: back
+        </span>
       </div>
 
-      {error && <div style={styles.error}>{error}</div>}
-
-      {loading && (
-        <div style={styles.loading}>
-          <div style={styles.spinner} />
-          <span>Loading JSON...</span>
-        </div>
-      )}
+      {error && <div className="h5v-panel-error">{error}</div>}
+      {loading && <div className="h5v-panel-loading"><div className="h5v-spinner" /><span>Loading JSON...</span></div>}
 
       {jsonStr && !loading && (
-        <div style={styles.codeContainer}>
-          <pre style={{
-            ...styles.code,
-            whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-            wordBreak: wordWrap ? 'break-all' as const : 'normal' as const,
-          }}>
-            {colorizeJson(jsonStr)}
+        <div className="h5v-panel-body">
+          <pre
+            className="h5v-json-code"
+            style={{
+              whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
+              wordBreak: wordWrap ? 'break-all' : 'normal',
+            }}
+          >
+            {colorize(jsonStr)}
           </pre>
         </div>
       )}
@@ -84,139 +81,29 @@ export default function JsonViewer({ rpc, path, name }: Props) {
   );
 }
 
-/**
- * Simple JSON syntax colorizer.
- */
-function colorizeJson(json: string): React.ReactNode[] {
+function colorize(json: string): React.ReactNode[] {
   const lines = json.split('\n');
-  const parts: React.ReactNode[] = [];
+  const out: React.ReactNode[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const colored = line
-      .replace(/"([^"\\]|\\.)*"\s*:/g, (m) => `\x01KEY${m}\x01END`)
-      .replace(/:\s*"([^"\\]|\\.)*"/g, (m) => `\x01STR${m}\x01END`)
-      .replace(/:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, (m) => `\x01NUM${m}\x01END`)
-      .replace(/:\s*(true|false|null)/g, (m) => `\x01BOOL${m}\x01END`);
+    const line = lines[i]
+      .replace(/"([^"\\]|\\.)*"\s*:/g, (m) => `\x01K${m}\x01E`)
+      .replace(/:\s*"([^"\\]|\\.)*"/g, (m) => `\x01S${m}\x01E`)
+      .replace(/:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, (m) => `\x01N${m}\x01E`)
+      .replace(/:\s*(true|false|null)/g, (m) => `\x01B${m}\x01E`);
 
-    const segments = colored.split('\x01');
-    const lineElements: React.ReactNode[] = [];
+    const segs = line.split('\x01');
+    const els: React.ReactNode[] = [];
 
-    for (let j = 0; j < segments.length; j++) {
-      const seg = segments[j];
-      if (seg.startsWith('KEY')) {
-        lineElements.push(<span key={`${i}-${j}`} style={{ color: '#9cdcfe' }}>{seg.slice(3).replace(/END$/, '')}</span>);
-      } else if (seg.startsWith('STR')) {
-        lineElements.push(<span key={`${i}-${j}`} style={{ color: '#ce9178' }}>{seg.slice(3).replace(/END$/, '')}</span>);
-      } else if (seg.startsWith('NUM')) {
-        lineElements.push(<span key={`${i}-${j}`} style={{ color: '#b5cea8' }}>{seg.slice(3).replace(/END$/, '')}</span>);
-      } else if (seg.startsWith('BOOL')) {
-        lineElements.push(<span key={`${i}-${j}`} style={{ color: '#569cd6' }}>{seg.slice(4).replace(/END$/, '')}</span>);
-      } else {
-        lineElements.push(<span key={`${i}-${j}`}>{seg.replace(/END$/, '')}</span>);
-      }
+    for (let j = 0; j < segs.length; j++) {
+      const s = segs[j];
+      const cls = s[0] === 'K' ? 'h5v-json-key' : s[0] === 'S' ? 'h5v-json-str' : s[0] === 'N' ? 'h5v-json-num' : s[0] === 'B' ? 'h5v-json-bool' : '';
+      const txt = cls ? s.slice(1).replace(/E$/, '') : s.replace(/E$/, '');
+      els.push(cls ? <span key={`${i}-${j}`} className={cls}>{txt}</span> : <span key={`${i}-${j}`}>{txt}</span>);
     }
 
-    parts.push(<span key={i}>{lineElements}{i < lines.length - 1 ? '\n' : ''}</span>);
+    out.push(<span key={i}>{els}{i < lines.length - 1 ? '\n' : ''}</span>);
   }
 
-  return parts;
+  return out;
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    background: '#1e1e1e',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 16px',
-    background: '#252526',
-    borderBottom: '1px solid #3c3c3c',
-    flexShrink: 0,
-  },
-  icon: {
-    fontSize: '14px',
-    color: '#dcdcaa',
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
-  },
-  title: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#ddd',
-  },
-  pathLabel: {
-    fontSize: '11px',
-    color: '#666',
-    fontFamily: 'monospace',
-    marginLeft: 'auto',
-  },
-  toolbar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '4px 16px',
-    background: '#252526',
-    borderBottom: '1px solid #3c3c3c',
-    flexShrink: 0,
-  },
-  toolBtn: {
-    padding: '3px 10px',
-    background: '#3c3c3c',
-    color: '#ccc',
-    border: '1px solid #555',
-    borderRadius: 3,
-    cursor: 'pointer',
-    fontSize: '11px',
-  },
-  wrapLabel: {
-    fontSize: '11px',
-    color: '#999',
-    display: 'flex',
-    alignItems: 'center',
-    cursor: 'pointer',
-  },
-  error: {
-    padding: '12px 16px',
-    background: '#3b1111',
-    color: '#f48771',
-    fontSize: '12px',
-  },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: '40px',
-    color: '#888',
-    fontSize: '13px',
-  },
-  spinner: {
-    width: 20,
-    height: 20,
-    border: '2px solid #333',
-    borderTopColor: '#4ec9b0',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  codeContainer: {
-    flex: 1,
-    overflow: 'auto',
-    background: '#1e1e1e',
-  },
-  code: {
-    margin: 0,
-    padding: '12px 16px',
-    fontSize: '13px',
-    fontFamily: "'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace",
-    lineHeight: 1.6,
-    color: '#d4d4d4',
-    tabSize: 2,
-  },
-};

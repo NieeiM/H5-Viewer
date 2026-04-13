@@ -1,6 +1,6 @@
 import { App as H5WebApp } from '@h5web/app';
 import { useEventListener } from '@react-hookz/web';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import {
@@ -16,7 +16,7 @@ import RemoteProvider from './RemoteProvider';
 import { vscode } from './vscode-api';
 
 // ---------------------------------------------------------------------------
-// View mode detection from dataset path
+// View mode detection
 // ---------------------------------------------------------------------------
 
 type ViewMode = 'h5web' | 'audio' | 'json';
@@ -32,7 +32,7 @@ function detectViewMode(path: string): ViewMode {
 }
 
 // ---------------------------------------------------------------------------
-// Format labels
+// Utils
 // ---------------------------------------------------------------------------
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -52,32 +52,77 @@ function formatSize(bytes: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Hook: observe @h5web/app's mainArea rect for overlay positioning
+// ---------------------------------------------------------------------------
+
+interface Rect { left: number; top: number; width: number; height: number }
+
+function useMainAreaRect(rootRef: React.RefObject<HTMLDivElement | null>): Rect | null {
+  const [rect, setRect] = useState<Rect | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    let mainArea: HTMLElement | null = null;
+    let resizeObs: ResizeObserver | null = null;
+    let mutationObs: MutationObserver | null = null;
+
+    const measure = () => {
+      if (!mainArea || !root) return;
+      const r = mainArea.getBoundingClientRect();
+      const rootR = root.getBoundingClientRect();
+      setRect({
+        left: r.left - rootR.left,
+        top: r.top - rootR.top,
+        width: r.width,
+        height: r.height,
+      });
+    };
+
+    const setup = () => {
+      mainArea = root.querySelector('[class*="mainArea"]');
+      if (mainArea) {
+        measure();
+        resizeObs = new ResizeObserver(measure);
+        resizeObs.observe(mainArea);
+        resizeObs.observe(root);
+      }
+    };
+
+    mutationObs = new MutationObserver(() => { if (!mainArea) setup(); });
+    mutationObs.observe(root, { childList: true, subtree: true });
+    setup();
+
+    return () => { resizeObs?.disconnect(); mutationObs?.disconnect(); };
+  }, [rootRef]);
+
+  return rect;
+}
+
+// ---------------------------------------------------------------------------
 // Loading screen
 // ---------------------------------------------------------------------------
 
 function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
-  const fileName = progress?.fileName;
-  const fileSize = progress?.fileSize;
-  const message = progress?.message || 'Initializing...';
-
   return (
-    <div style={styles.loadingContainer}>
-      <div style={styles.loadingCard}>
-        <div style={styles.spinner} />
-        {fileName && (
-          <div style={styles.fileInfo}>
-            <div style={styles.fileName}>{fileName}</div>
-            {fileSize !== undefined && fileSize > 0 && (
-              <div style={styles.fileSizeText}>{formatSize(fileSize)}</div>
+    <div className="h5v-loading-container">
+      <div className="h5v-loading-card">
+        <div className="h5v-spinner" />
+        {progress?.fileName && (
+          <div style={{ textAlign: 'center' }}>
+            <div className="h5v-file-name">{progress.fileName}</div>
+            {progress.fileSize !== undefined && progress.fileSize > 0 && (
+              <div className="h5v-file-size">{formatSize(progress.fileSize)}</div>
             )}
           </div>
         )}
-        <div style={styles.stepText}>{message}</div>
-        <div style={styles.progressBarOuter}>
+        <div className="h5v-step-text">{progress?.message || 'Initializing...'}</div>
+        <div className="h5v-progress-outer">
           {progress && progress.percent >= 0 ? (
-            <div style={{ ...styles.progressBarInner, width: `${progress.percent}%` }} />
+            <div className="h5v-progress-inner" style={{ width: `${progress.percent}%` }} />
           ) : (
-            <div style={styles.progressBarPulse} />
+            <div className="h5v-progress-pulse" />
           )}
         </div>
       </div>
@@ -93,231 +138,99 @@ function App() {
   const [fileInfo, setFileInfo] = useState<FileInfo>();
   const [revision, setRevision] = useState(0);
   const [progress, setProgress] = useState<LoadingProgress | null>(null);
-
-  // Current view mode and active dataset path
   const [viewMode, setViewMode] = useState<ViewMode>('h5web');
   const [activePath, setActivePath] = useState('');
 
-  // Single RpcClient shared by all components
   const rpc = useMemo(() => new RpcClient(vscode), []);
+  const h5webRootRef = useRef<HTMLDivElement>(null);
+  const mainAreaRect = useMainAreaRect(h5webRootRef);
 
   useEventListener(globalThis, 'message', (evt: MessageEvent<Message>) => {
     const { data: message } = evt;
-    if (message.type === MessageType.FileInfo) {
-      setFileInfo(message.data);
-      setProgress(null);
-    }
-    if (message.type === MessageType.FileChanged) {
-      setRevision((r) => r + 1);
-    }
-    if (message.type === MessageType.LoadingProgress) {
-      setProgress(message.data);
-    }
+    if (message.type === MessageType.FileInfo) { setFileInfo(message.data); setProgress(null); }
+    if (message.type === MessageType.FileChanged) { setRevision((r) => r + 1); }
+    if (message.type === MessageType.LoadingProgress) { setProgress(message.data); }
   });
 
-  useEffect(() => {
-    vscode.postMessage({ type: MessageType.Ready });
-  }, []);
+  useEffect(() => { vscode.postMessage({ type: MessageType.Ready }); }, []);
 
-  // Callback fired by RemoteH5Api when @h5web/app requests a dataset value
   const handlePathAccess = useCallback((path: string) => {
-    const mode = detectViewMode(path);
-    setViewMode(mode);
+    setViewMode(detectViewMode(path));
     setActivePath(path);
   }, []);
 
-  // Still loading
-  if (!fileInfo) {
-    return <LoadingScreen progress={progress} />;
-  }
+  const handleBack = useCallback(() => {
+    setViewMode('h5web');
+    setActivePath('');
+  }, []);
+
+  if (!fileInfo) return <LoadingScreen progress={progress} />;
 
   if (fileInfo.errorMessage) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.errorBox}>
-          <h3 style={styles.errorTitle}>Cannot open file</h3>
-          <pre style={styles.errorMessage}>{fileInfo.errorMessage}</pre>
+      <div className="h5v-loading-container">
+        <div className="h5v-error-box">
+          <h3 className="h5v-error-title">Cannot open file</h3>
+          <pre className="h5v-error-msg">{fileInfo.errorMessage}</pre>
         </div>
       </div>
     );
   }
 
   if (fileInfo.size === 0) {
-    return <div style={styles.loadingContainer}><p style={{ color: '#888' }}>File does not exist</p></div>;
+    return <div className="h5v-loading-container"><p>File does not exist</p></div>;
   }
 
-  const formatLabel = fileInfo.format ? FORMAT_LABELS[fileInfo.format] : undefined;
   const isMatLegacy = fileInfo.format === 'mat-v5' || fileInfo.format === 'mat-v7';
-  const activeDatasetName = activePath.split('/').pop() || '';
+  const showOverlay = viewMode !== 'h5web' && activePath && mainAreaRect;
 
   return (
     <ErrorBoundary
       fallbackRender={({ error }) => (
-        <div style={styles.loadingContainer}>
-          <p style={{ color: '#f48771' }}>{error instanceof Error ? error.message : 'Unknown error'}</p>
+        <div className="h5v-loading-container">
+          <p style={{ color: 'var(--vscode-errorForeground, #f48771)' }}>
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </p>
         </div>
       )}
     >
       {isMatLegacy && (
-        <div style={styles.banner}>
-          {formatLabel} — Entire file loaded into memory ({formatSize(fileInfo.size)}).
-          For better performance with large files, resave as MAT v7.3:
-          <code style={styles.code}> save('file.mat', '-v7.3')</code>
+        <div className="h5v-banner">
+          {FORMAT_LABELS[fileInfo.format!]} — Entire file loaded into memory ({formatSize(fileInfo.size)}).
+          <code className="h5v-code"> save('file.mat', '-v7.3')</code>
         </div>
       )}
 
-      <div style={styles.mainLayout}>
-        {/*
-          @h5web/app is always mounted (to preserve file tree state and selections),
-          but hidden when audio/json viewer is active.
-        */}
-        <div style={{
-          ...styles.viewerArea,
-          display: viewMode === 'h5web' ? 'block' : 'none',
-        }}>
-          <Suspense fallback={<LoadingScreen progress={progress} />}>
-            <RemoteProvider
-              key={revision}
-              filepath={fileInfo.name}
-              rpc={rpc}
-              onPathAccess={handlePathAccess}
-            >
-              <H5WebApp />
-            </RemoteProvider>
-          </Suspense>
-        </div>
+      <div className="h5v-root" ref={h5webRootRef}>
+        {/* @h5web/app always rendered — sidebar stays visible */}
+        <Suspense fallback={<LoadingScreen progress={progress} />}>
+          <RemoteProvider key={revision} filepath={fileInfo.name} rpc={rpc} onPathAccess={handlePathAccess}>
+            <H5WebApp />
+          </RemoteProvider>
+        </Suspense>
 
-        {/* Audio viewer — shown when user clicks an audio dataset */}
-        {viewMode === 'audio' && activePath && (
-          <div style={styles.viewerArea}>
-            <AudioViewer rpc={rpc} path={activePath} name={activeDatasetName} />
-          </div>
-        )}
-
-        {/* JSON viewer — shown when user clicks a JSON dataset */}
-        {viewMode === 'json' && activePath && (
-          <div style={styles.viewerArea}>
-            <JsonViewer rpc={rpc} path={activePath} name={activeDatasetName} />
+        {/* Overlay: positioned exactly over @h5web/app's mainArea */}
+        {showOverlay && (
+          <div
+            className="h5v-overlay"
+            style={{
+              left: mainAreaRect.left,
+              top: mainAreaRect.top,
+              width: mainAreaRect.width,
+              height: mainAreaRect.height,
+            }}
+          >
+            {viewMode === 'audio' && (
+              <AudioViewer rpc={rpc} path={activePath} name={activePath.split('/').pop() || ''} onBack={handleBack} />
+            )}
+            {viewMode === 'json' && (
+              <JsonViewer rpc={rpc} path={activePath} name={activePath.split('/').pop() || ''} onBack={handleBack} />
+            )}
           </div>
         )}
       </div>
     </ErrorBoundary>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
-const styles: Record<string, React.CSSProperties> = {
-  mainLayout: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    overflow: 'hidden',
-  },
-  viewerArea: {
-    flex: 1,
-    overflow: 'hidden',
-    minHeight: 0,
-  },
-  loadingContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    padding: '2rem',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    background: '#1e1e1e',
-  },
-  loadingCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    maxWidth: 380,
-    width: '100%',
-    gap: '12px',
-  },
-  spinner: {
-    width: 32,
-    height: 32,
-    border: '3px solid #333',
-    borderTopColor: '#4ec9b0',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-    marginBottom: 4,
-  },
-  fileInfo: {
-    textAlign: 'center' as const,
-  },
-  fileName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#ddd',
-    wordBreak: 'break-all' as const,
-  },
-  fileSizeText: {
-    fontSize: '12px',
-    color: '#888',
-    marginTop: 2,
-  },
-  stepText: {
-    fontSize: '12px',
-    color: '#999',
-    textAlign: 'center' as const,
-  },
-  progressBarOuter: {
-    width: '100%',
-    height: 3,
-    background: '#333',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  progressBarInner: {
-    height: '100%',
-    background: '#4ec9b0',
-    borderRadius: 2,
-    transition: 'width 0.3s ease',
-  },
-  progressBarPulse: {
-    height: '100%',
-    width: '40%',
-    background: 'linear-gradient(90deg, transparent, #4ec9b0, transparent)',
-    borderRadius: 2,
-    animation: 'pulse 1.5s ease-in-out infinite',
-  },
-  errorBox: {
-    maxWidth: 600,
-    padding: '1.5rem',
-    background: '#252526',
-    border: '1px solid #444',
-    borderRadius: 8,
-  },
-  errorTitle: {
-    margin: '0 0 1rem',
-    color: '#f48771',
-  },
-  errorMessage: {
-    margin: 0,
-    whiteSpace: 'pre-wrap',
-    fontSize: '0.85rem',
-    lineHeight: 1.6,
-    color: '#ccc',
-  },
-  banner: {
-    padding: '6px 12px',
-    background: '#2d2d00',
-    color: '#ccc',
-    fontSize: '0.8rem',
-    borderBottom: '1px solid #555',
-  },
-  code: {
-    background: '#333',
-    padding: '1px 4px',
-    borderRadius: 3,
-    fontFamily: 'monospace',
-  },
-};
 
 export default App;
