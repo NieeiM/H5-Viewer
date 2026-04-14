@@ -169,27 +169,173 @@
   flex-shrink: 0;
 }
 
-.h5v-seekbar {
+.h5v-seekbar-box {
   flex: 1;
-  height: 4px;
+  position: relative;
+  height: 20px;
+}
+
+.h5v-seekbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   cursor: pointer;
   accent-color: var(--vscode-progressBar-background, #4ec9b0);
 }
 
+.h5v-seekbar-display {
+  pointer-events: none;
+}
+
+.h5v-seekbar-input {
+  opacity: 0;
+}
+
 .h5v-volume-bar {
-  width: 60px;
+  width: 70px;
   height: 4px;
   cursor: pointer;
   accent-color: var(--vscode-progressBar-background, #4ec9b0);
   flex-shrink: 0;
 }
 
-.h5v-audio-info {
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground, #666);
-  padding: 2px 12px 6px;
+.h5v-audio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
   background: var(--vscode-sideBar-background, #252526);
   border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  font-size: 11px;
+}
+
+.h5v-audio-info-inline {
+  margin-left: auto;
+  color: var(--vscode-descriptionForeground, #666);
+  font-family: var(--vscode-editor-fontFamily, monospace);
+}
+
+/* ---------------------------------------------------------------------------
+   Settings tabs
+--------------------------------------------------------------------------- */
+
+.h5v-settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  height: 28px;
+  background: var(--vscode-sideBar-background, #252526);
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  font-size: 11px;
+}
+
+.h5v-settings-label {
+  color: var(--vscode-descriptionForeground, #888);
+  margin-right: 4px;
+  font-weight: 600;
+}
+
+.h5v-settings-tab {
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground, #888);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.h5v-settings-tab:hover {
+  color: var(--vscode-editor-foreground, #ccc);
+}
+
+.h5v-settings-tab.active {
+  color: var(--vscode-editor-foreground, #ccc);
+  border-bottom-color: var(--vscode-progressBar-background, #4ec9b0);
+}
+
+.h5v-settings-content {
+  padding: 8px 12px;
+  background: var(--vscode-sideBar-background, #252526);
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: center;
+}
+
+.h5v-settings-content h4 {
+  margin: 2px 0;
+  width: 100%;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #888);
+  text-transform: uppercase;
+}
+
+.h5v-num-input {
+  width: 70px;
+  padding: 2px 4px;
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #ccc);
+  border: 1px solid var(--vscode-panel-border, #555);
+  border-radius: 2px;
+  font-size: 11px;
+  margin: 0 4px;
+}
+
+.h5v-select {
+  padding: 2px 4px;
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #ccc);
+  border: 1px solid var(--vscode-panel-border, #555);
+  border-radius: 2px;
+  font-size: 11px;
+  margin: 0 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   Info table
+--------------------------------------------------------------------------- */
+
+.h5v-info-table {
+  padding: 4px 12px;
+  background: var(--vscode-sideBar-background, #252526);
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  font-size: 11px;
+}
+
+.h5v-info-table table {
+  border-collapse: collapse;
+}
+
+.h5v-info-table th {
+  text-align: left;
+  padding: 1px 12px 1px 0;
+  color: var(--vscode-descriptionForeground, #888);
+  font-weight: 500;
+}
+
+.h5v-info-table td {
+  padding: 1px 0;
+  color: var(--vscode-editor-foreground, #ccc);
+}
+
+/* ---------------------------------------------------------------------------
+   Shortcuts help bar
+--------------------------------------------------------------------------- */
+
+.h5v-shortcuts-bar {
+  padding: 3px 12px;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground, #666);
+  background: var(--vscode-sideBar-background, #252526);
+  border-top: 1px solid var(--vscode-panel-border, #3c3c3c);
+  flex-shrink: 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -207,14 +353,33 @@
   width: 100%;
 }
 
+.h5v-axis-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .h5v-playhead {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: var(--vscode-progressBar-background, #4ec9b0);
+  left: 0;
+  width: 0;
+  border-right: 3px solid var(--vscode-button-background, #4ec9b0);
   pointer-events: none;
-  transition: left 0.05s linear;
+  z-index: 3;
+}
+
+.h5v-selection {
+  display: none;
+  position: absolute;
+  border: 1px solid red;
+  background: rgba(255, 0, 0, 0.1);
+  pointer-events: none;
   z-index: 2;
 }
 
