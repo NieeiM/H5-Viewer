@@ -17,6 +17,7 @@
 - **RGB images** — Direct visualization of RGB datasets
 - **3D slicing** — Navigate slices of 3D+ datasets interactively
 - **Audio playback** — Play audio data stored in HDF5/MAT files with waveform and spectrogram visualization
+- **ML model inspection** — Browse SafeTensors and GGUF model weights as hierarchical tensor trees
 - **NeXus support** — Automatic interpretation of NXdata groups and axes
 - **Metadata inspector** — Attributes, chunk layout, compression filters, and data types
 - **Search** — Find entities across the entire file tree
@@ -65,7 +66,7 @@ Format is auto-detected from the file header. Each EEG channel is exposed as a 1
 
 ## Supported File Extensions
 
-The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.safetensors`, `.gguf`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
 
 For other extensions, right-click the file and select **Open With... > H5 Viewer (any extension)**.
 
@@ -100,6 +101,18 @@ Datasets named with `.npy` extension inside HDF5/MAT files are automatically rec
 > **Note:** JSON support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
 
 Datasets named with `.json` extension are displayed in a collapsible JSON Viewer panel with syntax highlighting, pretty-printing (auto-formats compact JSON to indented), word wrap toggle, and copy-to-clipboard.
+
+## SafeTensors Support (Experimental)
+
+> **Note:** SafeTensors support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
+
+Open `.safetensors` files directly. Tensor names are mapped to a hierarchical tree (dot-separated names become nested groups). Each tensor is loaded on-demand — only the tensor you click is read from disk, even for multi-GB model files. Supports F16, BF16, F32, F64, I8, I16, I32, I64, U8, BOOL dtypes. F16 and BF16 are automatically upcast to F32 for visualization.
+
+## GGUF Support (Experimental)
+
+> **Note:** GGUF support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
+
+Open `.gguf` model files (llama.cpp / GGML format). Displays all metadata key-value pairs and tensor information. Non-quantized tensors (F32, F16, BF16) can be visualized as Heatmap/Line/Matrix. Quantized tensors (Q4_0, Q4_K, Q5_K, Q6_K, etc.) display their type and size info (dequantization visualization planned for future updates).
 
 ## Compression Plugins
 

@@ -17,6 +17,7 @@
 - **RGB 图像** — 直接可视化 RGB 数据集
 - **3D 切片浏览** — 交互式浏览 3D 及更高维数据集的切片
 - **音频播放** — 播放 HDF5/MAT 文件中存储的音频数据，带波形和频谱可视化
+- **ML 模型检查** — 浏览 SafeTensors 和 GGUF 模型权重，以层级化 tensor 树展示
 - **NeXus 支持** — 自动解释 NXdata 组和轴数据集
 - **元数据检查器** — 查看属性、chunk 布局、压缩过滤器、数据类型
 - **搜索** — 在整个文件树中搜索实体
@@ -65,7 +66,7 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 
 ## 支持的文件扩展名
 
-自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
+自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.safetensors`、`.gguf`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
 
 其他扩展名可右键文件选择 **打开方式... > H5 Viewer (any extension)**。
 
@@ -100,6 +101,18 @@ H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension H
 > **注意：** JSON 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
 
 以 `.json` 扩展名命名的 dataset 在可折叠的 JSON 查看面板中展示，具有语法高亮、自动格式化（将紧凑 JSON 转为缩进格式）、自动换行开关和一键复制功能。
+
+## SafeTensors 支持（实验性）
+
+> **注意：** SafeTensors 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
+
+直接打开 `.safetensors` 文件。Tensor 名称映射为层级化树结构（点分隔名称转为嵌套 group）。每个 tensor 按需加载 — 即使对于数 GB 的模型文件，也只读取你点击的那个 tensor。支持 F16、BF16、F32、F64、I8、I16、I32、I64、U8、BOOL 数据类型。F16 和 BF16 自动上转为 F32 进行可视化。
+
+## GGUF 支持（实验性）
+
+> **注意：** GGUF 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
+
+打开 `.gguf` 模型文件（llama.cpp / GGML 格式）。展示所有元数据键值对和 tensor 信息。非量化 tensor（F32、F16、BF16）可以用热力图/折线图/表格可视化。量化 tensor（Q4_0、Q4_K、Q5_K、Q6_K 等）展示类型和大小信息（反量化可视化计划在未来更新中支持）。
 
 ## 压缩插件
 

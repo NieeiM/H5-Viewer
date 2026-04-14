@@ -15,9 +15,13 @@ import {
 } from 'vscode';
 
 import { CntService } from './cnt-service.js';
+import { GGUFService } from './gguf-service.js';
+import { isGGUFFile } from './gguf-parser.js';
 import { H5Service, type Logger } from './h5-service.js';
 import { MatService } from './mat-service.js';
 import { detectMatVersion, isHdf5File, type MatVersion } from './mat-version.js';
+import { SafeTensorsService } from './safetensors-service.js';
+import { isSafeTensorsFile } from './safetensors-parser.js';
 import { type FileInfo, type Message, MessageType, type RpcRequest } from './models.js';
 
 /** Rough estimate of JSON-serialized size for logging */
@@ -298,9 +302,36 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       return this.initCntService(filePath, name, size, sendProgress, logger);
     }
 
-    // All other extensions: try HDF5 first
-    // (some extensions like .nc might not actually be HDF5)
+    // .safetensors files
+    if (ext === '.safetensors') {
+      sendProgress('Parsing SafeTensors...');
+      const svc = new SafeTensorsService(logger);
+      await svc.init(filePath, (msg) => sendProgress(msg));
+      return { fileInfo: { name, size, format: 'safetensors' as FileInfo['format'] }, dataService: svc };
+    }
+
+    // .gguf files
+    if (ext === '.gguf') {
+      sendProgress('Parsing GGUF...');
+      const svc = new GGUFService(logger);
+      await svc.init(filePath, (msg) => sendProgress(msg));
+      return { fileInfo: { name, size, format: 'gguf' as FileInfo['format'] }, dataService: svc };
+    }
+
+    // All other extensions: try HDF5 first, or auto-detect by magic bytes
     try {
+      if (isSafeTensorsFile(filePath)) {
+        sendProgress('Detected SafeTensors format...');
+        const svc = new SafeTensorsService(logger);
+        await svc.init(filePath, (msg) => sendProgress(msg));
+        return { fileInfo: { name, size, format: 'safetensors' as FileInfo['format'] }, dataService: svc };
+      }
+      if (isGGUFFile(filePath)) {
+        sendProgress('Detected GGUF format...');
+        const svc = new GGUFService(logger);
+        await svc.init(filePath, (msg) => sendProgress(msg));
+        return { fileInfo: { name, size, format: 'gguf' as FileInfo['format'] }, dataService: svc };
+      }
       if (!isHdf5File(filePath)) {
         return {
           fileInfo: {

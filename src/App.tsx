@@ -38,6 +38,7 @@ function detectViewMode(path: string): ViewMode {
 const FORMAT_LABELS: Record<string, string> = {
   'hdf5': 'HDF5', 'mat-v73': 'MAT v7.3 (HDF5)', 'mat-v5': 'MAT v5',
   'mat-v7': 'MAT v7', 'cnt-neuroscan': 'Neuroscan CNT', 'cnt-ant': 'ANT Neuro CNT',
+  'safetensors': 'SafeTensors', 'gguf': 'GGUF',
 };
 
 function formatSize(bytes: number): string {
