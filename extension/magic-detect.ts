@@ -206,11 +206,22 @@ export async function detectContentType(
 
   // Both detected
   if (byMagic && byExt) {
-    // Categories agree → use magic result (more reliable)
-    if (byMagic.category === byExt.category) {
+    // Same format → no warning
+    if (byMagic.ext === byExt.ext || byMagic.mime === byExt.mime) {
       return { ...byMagic };
     }
-    // Categories disagree → use magic (priority), add warning
+    // Same category but different specific format (e.g. ext=mp3 but content=wav)
+    // → use magic result + warning
+    if (byMagic.category === byExt.category) {
+      return {
+        ...byMagic,
+        mismatchWarning:
+          `File extension suggests ${byExt.label} (.${byExt.ext}), ` +
+          `but content is actually ${byMagic.label} (${byMagic.mime}). ` +
+          `Using detected content type.`,
+      };
+    }
+    // Different category entirely → use magic + stronger warning
     return {
       ...byMagic,
       mismatchWarning:
