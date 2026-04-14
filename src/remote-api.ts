@@ -199,8 +199,8 @@ export class RemoteH5Api extends DataProviderApi {
     const entity = await this.rpc.call('getEntity', { path }) as ProvidedEntity;
 
     // Notify listener when a non-root entity is accessed
-    // This fires on every tree click (both groups and datasets)
     if (path !== '/') {
+      console.log('[H5V] getEntity path:', path, 'hasCallback:', !!this._onPathAccess);
       this._onPathAccess?.(path);
     }
 
@@ -213,7 +213,7 @@ export class RemoteH5Api extends DataProviderApi {
   ): Promise<unknown> {
     const { dataset, selection } = params;
 
-    // Also notify on getValue (redundant but ensures we catch dataset access)
+    console.log('[H5V] getValue path:', dataset.path, 'hasCallback:', !!this._onPathAccess);
     this._onPathAccess?.(dataset.path);
 
     const raw = await this.rpc.call('getValue', {

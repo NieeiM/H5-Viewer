@@ -1,6 +1,6 @@
 import { App as H5WebApp } from '@h5web/app';
 import { useEventListener } from '@react-hookz/web';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import {
@@ -36,12 +36,8 @@ function detectViewMode(path: string): ViewMode {
 // ---------------------------------------------------------------------------
 
 const FORMAT_LABELS: Record<string, string> = {
-  'hdf5': 'HDF5',
-  'mat-v73': 'MAT v7.3 (HDF5)',
-  'mat-v5': 'MAT v5',
-  'mat-v7': 'MAT v7',
-  'cnt-neuroscan': 'Neuroscan CNT',
-  'cnt-ant': 'ANT Neuro CNT',
+  'hdf5': 'HDF5', 'mat-v73': 'MAT v7.3 (HDF5)', 'mat-v5': 'MAT v5',
+  'mat-v7': 'MAT v7', 'cnt-neuroscan': 'Neuroscan CNT', 'cnt-ant': 'ANT Neuro CNT',
 };
 
 function formatSize(bytes: number): string {
@@ -49,55 +45,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-// ---------------------------------------------------------------------------
-// Hook: observe @h5web/app's mainArea rect for overlay positioning
-// ---------------------------------------------------------------------------
-
-interface Rect { left: number; top: number; width: number; height: number }
-
-function useMainAreaRect(rootRef: React.RefObject<HTMLDivElement | null>): Rect | null {
-  const [rect, setRect] = useState<Rect | null>(null);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    let mainArea: HTMLElement | null = null;
-    let resizeObs: ResizeObserver | null = null;
-    let mutationObs: MutationObserver | null = null;
-
-    const measure = () => {
-      if (!mainArea || !root) return;
-      const r = mainArea.getBoundingClientRect();
-      const rootR = root.getBoundingClientRect();
-      setRect({
-        left: r.left - rootR.left,
-        top: r.top - rootR.top,
-        width: r.width,
-        height: r.height,
-      });
-    };
-
-    const setup = () => {
-      mainArea = root.querySelector('[class*="mainArea"]');
-      if (mainArea) {
-        measure();
-        resizeObs = new ResizeObserver(measure);
-        resizeObs.observe(mainArea);
-        resizeObs.observe(root);
-      }
-    };
-
-    mutationObs = new MutationObserver(() => { if (!mainArea) setup(); });
-    mutationObs.observe(root, { childList: true, subtree: true });
-    setup();
-
-    return () => { resizeObs?.disconnect(); mutationObs?.disconnect(); };
-  }, [rootRef]);
-
-  return rect;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,11 +66,9 @@ function LoadingScreen({ progress }: { progress: LoadingProgress | null }) {
         )}
         <div className="h5v-step-text">{progress?.message || 'Initializing...'}</div>
         <div className="h5v-progress-outer">
-          {progress && progress.percent >= 0 ? (
-            <div className="h5v-progress-inner" style={{ width: `${progress.percent}%` }} />
-          ) : (
-            <div className="h5v-progress-pulse" />
-          )}
+          {progress && progress.percent >= 0
+            ? <div className="h5v-progress-inner" style={{ width: `${progress.percent}%` }} />
+            : <div className="h5v-progress-pulse" />}
         </div>
       </div>
     </div>
@@ -142,8 +87,6 @@ function App() {
   const [activePath, setActivePath] = useState('');
 
   const rpc = useMemo(() => new RpcClient(vscode), []);
-  const h5webRootRef = useRef<HTMLDivElement>(null);
-  const mainAreaRect = useMainAreaRect(h5webRootRef);
 
   useEventListener(globalThis, 'message', (evt: MessageEvent<Message>) => {
     const { data: message } = evt;
@@ -155,7 +98,8 @@ function App() {
   useEffect(() => { vscode.postMessage({ type: MessageType.Ready }); }, []);
 
   const handlePathAccess = useCallback((path: string) => {
-    setViewMode(detectViewMode(path));
+    const mode = detectViewMode(path);
+    setViewMode(mode);
     setActivePath(path);
   }, []);
 
@@ -182,7 +126,7 @@ function App() {
   }
 
   const isMatLegacy = fileInfo.format === 'mat-v5' || fileInfo.format === 'mat-v7';
-  const showOverlay = viewMode !== 'h5web' && activePath && mainAreaRect;
+  const activeDatasetName = activePath.split('/').pop() || '';
 
   return (
     <ErrorBoundary
@@ -201,32 +145,29 @@ function App() {
         </div>
       )}
 
-      <div className="h5v-root" ref={h5webRootRef}>
-        {/* @h5web/app always rendered — sidebar stays visible */}
-        <Suspense fallback={<LoadingScreen progress={progress} />}>
-          <RemoteProvider key={revision} filepath={fileInfo.name} rpc={rpc} onPathAccess={handlePathAccess}>
-            <H5WebApp />
-          </RemoteProvider>
-        </Suspense>
+      {/*
+        View switching: h5web / audio / json are mutually exclusive.
+        @h5web/app is hidden (not unmounted) when audio/json is active,
+        so file tree state is preserved. User clicks "Back" to return.
+      */}
+      <div className="h5v-root">
+        {/* @h5web/app — always mounted, hidden when audio/json active */}
+        <div style={{ display: viewMode === 'h5web' ? 'contents' : 'none' }}>
+          <Suspense fallback={<LoadingScreen progress={progress} />}>
+            <RemoteProvider key={revision} filepath={fileInfo.name} rpc={rpc} onPathAccess={handlePathAccess}>
+              <H5WebApp />
+            </RemoteProvider>
+          </Suspense>
+        </div>
 
-        {/* Overlay: positioned exactly over @h5web/app's mainArea */}
-        {showOverlay && (
-          <div
-            className="h5v-overlay"
-            style={{
-              left: mainAreaRect.left,
-              top: mainAreaRect.top,
-              width: mainAreaRect.width,
-              height: mainAreaRect.height,
-            }}
-          >
-            {viewMode === 'audio' && (
-              <AudioViewer rpc={rpc} path={activePath} name={activePath.split('/').pop() || ''} onBack={handleBack} />
-            )}
-            {viewMode === 'json' && (
-              <JsonViewer rpc={rpc} path={activePath} name={activePath.split('/').pop() || ''} onBack={handleBack} />
-            )}
-          </div>
+        {/* Audio viewer */}
+        {viewMode === 'audio' && activePath && (
+          <AudioViewer rpc={rpc} path={activePath} name={activeDatasetName} onBack={handleBack} />
+        )}
+
+        {/* JSON viewer */}
+        {viewMode === 'json' && activePath && (
+          <JsonViewer rpc={rpc} path={activePath} name={activeDatasetName} onBack={handleBack} />
         )}
       </div>
     </ErrorBoundary>

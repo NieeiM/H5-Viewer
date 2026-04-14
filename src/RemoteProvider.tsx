@@ -23,6 +23,7 @@ function RemoteProvider(props: PropsWithChildren<Props>) {
 
   // Wire up the path access callback
   useEffect(() => {
+    console.log('[H5V] RemoteProvider: wiring onPathAccess, hasCallback:', !!onPathAccess);
     api.onPathAccess = onPathAccess || null;
     return () => { api.onPathAccess = null; };
   }, [api, onPathAccess]);

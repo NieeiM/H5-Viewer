@@ -10,37 +10,22 @@
 }
 
 .h5v-root {
-  position: relative;
   height: 100vh;
   overflow: hidden;
 }
 
 /* ---------------------------------------------------------------------------
-   Overlay — covers @h5web/app's mainArea (right panel) exactly
---------------------------------------------------------------------------- */
-
-.h5v-overlay {
-  position: absolute;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  background: var(--vscode-editor-background, #1e1e1e);
-  color: var(--vscode-editor-foreground, #cccccc);
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  overflow: hidden;
-}
-
-/* ---------------------------------------------------------------------------
-   Overlay inner (fills the overlay container)
+   Full-screen viewer (Audio/JSON) — replaces @h5web/app when active
 --------------------------------------------------------------------------- */
 
 .h5v-overlay-inner {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   overflow: hidden;
   background: var(--vscode-editor-background, #1e1e1e);
   color: var(--vscode-editor-foreground, #ccc);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
 }
 
 /* ---------------------------------------------------------------------------
