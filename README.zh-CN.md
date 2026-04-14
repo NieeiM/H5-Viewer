@@ -1,171 +1,102 @@
-# H5 Viewer
+# DataPeek
 
 [![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
 [![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
 
-**在 VS Code 中直接可视化 HDF5 文件** — 专为 Remote SSH 远程开发优化，按需加载数据。
+**在 VS Code 中可视化科学数据、ML 模型权重、音频等各类数据文件。**
+
+专为 Remote SSH 优化，无需文件传输，无大小限制。
 
 [English / 英文文档](./README.md)
 
-![演示](./assets/vscode-h5web.gif)
+## 支持的格式
 
-## 核心功能
+| 格式 | 扩展名 | 工作方式 |
+|---|---|---|
+| **HDF5** | `.h5` `.hdf5` `.hdf` `.nx` `.nxs` `.nc` `.nc4` + [更多](#全部扩展名) | 通过 h5wasm 按需加载。解析在服务器端运行，仅传输请求的数据切片 |
+| **MATLAB** | `.mat` | v7.3（HDF5）：按需加载。v5/v7：全量解析 |
+| **NumPy** | `.npy` | 独立文件或 HDF5 内嵌 blob。透明解析，显示真实的形状和数据类型 |
+| **SafeTensors** | `.safetensors` | HuggingFace 模型格式。按需加载 tensor，支持多 GB 文件 |
+| **GGUF** | `.gguf` | llama.cpp 模型格式。元数据 + tensor 树。非量化 tensor 可可视化 |
+| **脑电 (Neuroscan)** | `.cnt` | 二进制格式。随机访问通道加载 |
+| **脑电 (ANT Neuro)** | `.cnt` | RIFF/RAW3 压缩格式。按 epoch 解压 |
+| **音频 blob** | HDF5/MAT 内嵌 | `.wav` `.mp3` `.flac` `.ogg` `.aac` 命名的 dataset 自动检测 |
+| **JSON blob** | HDF5/MAT 内嵌 | `.json` 命名的 dataset 语法高亮展示 |
+
+格式通过文件头 magic bytes 自动检测，不仅仅依赖扩展名。
+
+## 可视化类型
 
 - **折线图** — 1D 数据集，支持误差棒、辅助信号、CSV 导出
 - **热力图** — 2D 数据集，多种 colormap、复数支持、轴控制
-- **表格视图** — 数值矩阵和复合数据集的表格展示
-- **RGB 图像** — 直接可视化 RGB 数据集
-- **3D 切片浏览** — 交互式浏览 3D 及更高维数据集的切片
-- **音频播放** — 播放 HDF5/MAT 文件中存储的音频数据，带波形和频谱可视化
-- **ML 模型检查** — 浏览 SafeTensors 和 GGUF 模型权重，以层级化 tensor 树展示
-- **NeXus 支持** — 自动解释 NXdata 组和轴数据集
-- **元数据检查器** — 查看属性、chunk 布局、压缩过滤器、数据类型
-- **搜索** — 在整个文件树中搜索实体
+- **表格** — 数值和复合数据集的矩阵视图
+- **3D 切片** — 交互式浏览高维数据集切片
+- **音频播放器** — 波形 + 频谱图（Linear/Log/Mel），支持播放/定位/音量/滤波器
+- **JSON 查看器** — 语法高亮、自动格式化、复制、自动换行
+- **ML 模型浏览** — 从点分隔名称构建层级化 tensor 树（如 `model.layers.0.weight`）
 
-## 远程优化
+## 远程 SSH 优化
 
-本插件是 [vscode-h5web](https://github.com/silx-kit/vscode-h5web) 的 fork，重新设计了架构以优化远程开发体验。
+原版 [vscode-h5web](https://github.com/silx-kit/vscode-h5web) 将整个文件传输到本地浏览器解析。500 MB 文件 = 500 MB 网络传输。超过 2 GB 的文件无法打开。
 
-### 原版的问题
+**DataPeek 在远程服务器上运行解析器**，仅发送你正在查看的数据：
 
-原版插件在远程场景下会将**整个 HDF5 文件**从服务器传输到本地浏览器进行解析。一个 500 MB 的文件意味着需要传输 500 MB 才能开始渲染。超过 2 GB 的文件根本无法打开。
-
-### 解决方案
-
-H5 Viewer 将 HDF5 解析器 (h5wasm) 运行在**远程服务器**（Extension Host）上，仅通过 VS Code 的消息通道将需要的数据切片发送到本地 webview。文件始终留在服务器上。
-
-| | 原版 | H5 Viewer |
+| | 原版 H5Web | DataPeek |
 |---|---|---|
-| 打开 500 MB 文件 | 传输 500 MB 后解析 | 服务器端解析，传输约 10 KB 元数据 |
-| 切换数据集 | 即时（内存中） | RPC 请求（毫秒级延迟） |
+| 打开 500 MB 文件 | 传输 500 MB | 传输约 10 KB 元数据 |
 | 文件大小限制 | 2 GB | **无限制** |
-| 远程体验 | 慢 | 快 |
-
-## MATLAB .mat 文件支持（实验性）
-
-> **注意：** MAT 文件支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-| MAT 版本 | 支持情况 | 说明 |
-|---|---|---|
-| **v7.3** | 完整支持（按需加载） | 基于 HDF5，与 .h5 文件体验一致 |
-| **v5 / v7** | 完整支持（全量加载） | 传统二进制格式，使用 mat-for-js 解析 |
-| **v4** | 不支持 | 提示用户用 v7.3 格式重新保存 |
-
-对于 MAT v5/v7 文件，界面顶部会显示提示横幅，说明文件已全量加载到内存。对于大文件，建议在 MATLAB 中用 `save('file.mat', '-v7.3')` 重新保存以获得更好的性能。
-
-## 脑电 .cnt 文件支持（实验性）
-
-> **注意：** CNT 文件支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-| 格式 | 支持情况 | 说明 |
-|---|---|---|
-| **Neuroscan CNT** | 完整支持（按需加载） | SCAN/SynAmps/NuAmps 系统的二进制格式。随机访问，无文件大小限制 |
-| **ANT Neuro CNT** | 完整支持（按 epoch 加载） | eego/waveguard 系统的 RIFF 容器 + RAW3 压缩格式。按 epoch 解压 |
-
-格式从文件头自动检测。每个 EEG 通道作为 1D 数据集展示（物理值，单位 µV）。事件/触发器列在 `/events` 下。
-
-## 支持的文件扩展名
-
-自动打开以下格式：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.safetensors`、`.gguf`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
-
-其他扩展名可右键文件选择 **打开方式... > H5 Viewer (any extension)**。
-
-将 H5 Viewer 设为其他扩展名的默认编辑器：
-
-```json
-"workbench.editorAssociations": {
-  "*.foo": "h5viewer.viewer"
-}
-```
-
-## 音频数据支持（实验性）
-
-> **注意：** 音频支持为实验性功能，尚未经过充分测试。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-插件自动检测 HDF5/MAT 文件中的音频数据，并在底部显示可折叠的音频播放面板：
-
-**编码音频 blob** — 以音频扩展名（`.mp3`、`.wav`、`.flac`、`.ogg`、`.aac`、`.m4a`、`.opus`）命名的 dataset。使用浏览器 `AudioContext.decodeAudioData()` 解码。
-
-**PCM 采样数组** — 看起来像音频的 1D 或 2D 数值 dataset（如 shape `[160000]` 或 `[2, 160000]`）。采样率从属性中读取（`sample_rate`、`sampleRate` 等），默认 44100 Hz。
-
-功能：播放控制（播放/暂停、拖动、音量）、波形可视化（Canvas 2D）、频谱图可视化（FFT，使用 ooura 库）。大数据集加载前会显示警告。
-
-## NumPy .npy 支持（实验性）
-
-> **注意：** NPY 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-以 `.npy` 扩展名命名的 dataset 会被自动识别为嵌入的 NumPy 数组。插件透明解析 NPY 二进制格式（v1.0/v2.0/v3.0），展示实际的数组形状、数据类型和值，而非原始字节。支持所有标准 NumPy 数据类型（int8-64、uint8-64、float16-64、bool）。解析后的数组使用标准的折线图/热力图/表格可视化展示。
-
-## JSON 查看器（实验性）
-
-> **注意：** JSON 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-以 `.json` 扩展名命名的 dataset 在可折叠的 JSON 查看面板中展示，具有语法高亮、自动格式化（将紧凑 JSON 转为缩进格式）、自动换行开关和一键复制功能。
-
-## SafeTensors 支持（实验性）
-
-> **注意：** SafeTensors 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-直接打开 `.safetensors` 文件。Tensor 名称映射为层级化树结构（点分隔名称转为嵌套 group）。每个 tensor 按需加载 — 即使对于数 GB 的模型文件，也只读取你点击的那个 tensor。支持 F16、BF16、F32、F64、I8、I16、I32、I64、U8、BOOL 数据类型。F16 和 BF16 自动上转为 F32 进行可视化。
-
-## GGUF 支持（实验性）
-
-> **注意：** GGUF 支持为实验性功能。如遇到问题，请[提交 Issue](https://github.com/NieeiM/H5-Viewer/issues)。
-
-打开 `.gguf` 模型文件（llama.cpp / GGML 格式）。展示所有元数据键值对和 tensor 信息。非量化 tensor（F32、F16、BF16）可以用热力图/折线图/表格可视化。量化 tensor（Q4_0、Q4_K、Q5_K、Q6_K 等）展示类型和大小信息（反量化可视化计划在未来更新中支持）。
-
-## 压缩插件
-
-支持的 HDF5 压缩过滤器：**Blosc**、**Blosc2**、**Bitshuffle**、**BZIP2**、**JPEG**、**LZ4**、**LZF**、**ZFP**、**Zstandard**。
-
-插件在服务器端自动加载，无需额外配置。
-
-## 平台支持
-
-本插件完全跨平台。HDF5 解析器和压缩插件均编译为 WebAssembly，单个安装包同时兼容 **x86_64** 和 **ARM64**（Linux、macOS、Windows）。
-
-## 架构
-
-```
-远程服务器                                本地机器
-┌──────────────────────┐              ┌──────────────────────┐
-│  Extension Host      │              │  Webview (浏览器)     │
-│  (Node.js)           │              │                      │
-│                      │  postMessage │                      │
-│  h5wasm ──> HDF5文件  │ <── 请求     │  DataProvider        │
-│  (直接读取磁盘,       │ ──> 响应     │    getEntity()       │
-│   无需加载到内存)      │  (数据切片)  │    getValue()        │
-│                      │              │                      │
-│  压缩插件在本地加载    │              │  @h5web/app 渲染     │
-│                      │              │  可视化组件            │
-└──────────────────────┘              └──────────────────────┘
-```
+| 切换数据集 | 即时（内存中） | RPC 请求（毫秒级） |
 
 ## 安装
 
 **从 GitHub Release 安装：**
-
 1. 前往 [Releases](https://github.com/NieeiM/H5-Viewer/releases)
 2. 下载 `.vsix` 文件
-3. 在 VS Code 中：`Ctrl+Shift+P` → `Extensions: Install from VSIX...`
+3. `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
 
 **从源码构建：**
-
 ```bash
 git clone https://github.com/NieeiM/H5-Viewer.git
 cd H5-Viewer
-pnpm install
-pnpm build
+pnpm install && pnpm build
 pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
+
+## 全部扩展名
+
+默认打开：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.npy`、`.safetensors`、`.gguf`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
+
+其他文件：右键 → **打开方式... → DataPeek (any extension)**。
+
+```json
+"workbench.editorAssociations": {
+  "*.foo": "datapeek.viewer"
+}
+```
+
+## 实验性功能
+
+以下功能可用但尚未充分测试：
+
+- **MATLAB .mat**（v5/v7/v7.3）
+- **脑电 .cnt**（Neuroscan + ANT Neuro）
+- **音频**播放和频谱图
+- **SafeTensors** 和 **GGUF** 模型文件
+- **NPY** 和 **JSON** 内嵌数据集
+
+[反馈问题](https://github.com/NieeiM/H5-Viewer/issues)
+
+## 平台支持
+
+单个安装包兼容 **x86_64** 和 **ARM64**（Linux、macOS、Windows）。所有解析器基于 WebAssembly 或纯 JavaScript，无原生二进制依赖。
 
 ## 致谢
 
 基于以下项目构建：
-- [H5Web](https://h5web.panosc.eu/) 和 [h5wasm](https://github.com/usnistgov/h5wasm)，由 ESRF（欧洲同步辐射光源）开发
-- 音频播放和频谱可视化改编自 [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview)，由 sukumo28 开发（MIT 许可证）
+- [H5Web](https://h5web.panosc.eu/) 和 [h5wasm](https://github.com/usnistgov/h5wasm)，由 ESRF 开发
+- 音频播放和频谱可视化改编自 [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview)，由 sukumo28 开发（MIT）
 - ANT Neuro CNT RAW3 解压缩移植自 [libeep](https://github.com/mscheltienne/antio)（LGPL-3.0）
 
 ## 许可证
 
-GPL-3.0（因 mat-for-js 依赖）
+GPL-3.0

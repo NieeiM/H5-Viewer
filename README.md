@@ -1,171 +1,102 @@
-# H5 Viewer
+# DataPeek
 
 [![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
 [![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
 
-**Visualize HDF5 files directly in VS Code** — optimized for Remote SSH with on-demand data loading.
+**Visualize scientific data, ML model weights, audio, and more — right inside VS Code.**
+
+Optimized for Remote SSH. No file transfer, no size limit.
 
 [Chinese / 中文文档](./README.zh-CN.md)
 
-![Demo](./assets/vscode-h5web.gif)
+## Supported Formats
 
-## Key Features
+| Format | Extensions | How it works |
+|---|---|---|
+| **HDF5** | `.h5` `.hdf5` `.hdf` `.nx` `.nxs` `.nc` `.nc4` + [20 more](#all-extensions) | On-demand loading via h5wasm. Runs on the server, only requested data slices are transferred |
+| **MATLAB** | `.mat` | v7.3 (HDF5-based): on-demand. v5/v7: full parse via mat-for-js |
+| **NumPy** | `.npy` | Standalone files or blobs inside HDF5. Parsed transparently — shows real shape/dtype |
+| **SafeTensors** | `.safetensors` | HuggingFace model format. On-demand tensor loading, even for multi-GB files |
+| **GGUF** | `.gguf` | llama.cpp model format. Metadata + tensor tree. Non-quantized tensors visualizable |
+| **EEG (Neuroscan)** | `.cnt` | Binary format. Random-access channel loading |
+| **EEG (ANT Neuro)** | `.cnt` | RIFF/RAW3 compressed. Epoch-based decompression |
+| **Audio blobs** | inside HDF5/MAT | `.wav` `.mp3` `.flac` `.ogg` `.aac` named datasets auto-detected |
+| **JSON blobs** | inside HDF5/MAT | `.json` named datasets shown with syntax highlighting |
 
-- **Line plots** — 1D datasets with error bars, auxiliary signals, and CSV export
-- **Heatmaps** — 2D datasets with multiple colormaps, complex number support, and axis controls
+Format is auto-detected from file header (magic bytes), not just extension.
+
+## Visualizations
+
+- **Line plots** — 1D datasets with error bars, auxiliary signals, CSV export
+- **Heatmaps** — 2D datasets with colormaps, complex number support, axis controls
 - **Tables** — Matrix view for numerical and compound datasets
-- **RGB images** — Direct visualization of RGB datasets
-- **3D slicing** — Navigate slices of 3D+ datasets interactively
-- **Audio playback** — Play audio data stored in HDF5/MAT files with waveform and spectrogram visualization
-- **ML model inspection** — Browse SafeTensors and GGUF model weights as hierarchical tensor trees
-- **NeXus support** — Automatic interpretation of NXdata groups and axes
-- **Metadata inspector** — Attributes, chunk layout, compression filters, and data types
-- **Search** — Find entities across the entire file tree
+- **3D slicing** — Navigate slices of higher-dimensional datasets
+- **Audio player** — Waveform + spectrogram (Linear/Log/Mel), playback with seek/volume/filters
+- **JSON viewer** — Syntax-highlighted, auto-formatted, with copy and word wrap
+- **ML model browser** — Hierarchical tensor tree from dot-separated names (e.g. `model.layers.0.weight`)
 
-## Remote Optimization
+## Remote SSH Optimization
 
-This is a fork of [vscode-h5web](https://github.com/silx-kit/vscode-h5web) with a redesigned architecture for remote development.
+The original [vscode-h5web](https://github.com/silx-kit/vscode-h5web) transfers the entire file to the local browser for parsing. A 500 MB file = 500 MB network transfer. Files over 2 GB can't open at all.
 
-### The Problem
+**DataPeek runs the parser on the remote server** and sends only the data you're looking at:
 
-The original extension transfers **the entire HDF5 file** from the remote server to the local browser for parsing. A 500 MB file means 500 MB of network transfer before anything renders. Files over 2 GB cannot be opened at all.
-
-### The Solution
-
-H5 Viewer runs the HDF5 parser (h5wasm) on the **remote server** (Extension Host) and sends only the requested data slices to the local webview via VS Code's message passing. The file never leaves the server.
-
-| | Original | H5 Viewer |
+| | Original H5Web | DataPeek |
 |---|---|---|
-| Open a 500 MB file | Transfer 500 MB, then parse | Parse on server, transfer ~10 KB metadata |
-| Switch dataset | Instant (in memory) | RPC request (~ms latency) |
+| Open a 500 MB file | Transfer 500 MB | Transfer ~10 KB metadata |
 | File size limit | 2 GB | **None** |
-| Remote experience | Slow | Fast |
-
-## MATLAB .mat File Support (Experimental)
-
-> **Note:** MAT file support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-| MAT Version | Support | Notes |
-|---|---|---|
-| **v7.3** | Full (on-demand loading) | HDF5-based, same fast experience as .h5 files |
-| **v5 / v7** | Full (loads entire file) | Legacy binary format, parsed with mat-for-js |
-| **v4** | Not supported | Prompt to resave as v7.3 |
-
-For MAT v5/v7 files, a banner reminds you that the entire file is loaded into memory. For large files, resave in MATLAB with `save('file.mat', '-v7.3')` for better performance.
-
-## EEG .cnt File Support (Experimental)
-
-> **Note:** CNT file support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-| Format | Support | Notes |
-|---|---|---|
-| **Neuroscan CNT** | Full (on-demand loading) | Binary format from SCAN/SynAmps/NuAmps systems. Random access, no file size limit |
-| **ANT Neuro CNT** | Full (epoch-based loading) | RIFF container with RAW3 compression from eego/waveguard systems. Decompressed per-epoch |
-
-Format is auto-detected from the file header. Each EEG channel is exposed as a 1D dataset (physical values in µV). Events/triggers are listed under `/events`.
-
-## Supported File Extensions
-
-The viewer opens automatically for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.safetensors`, `.gguf`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
-
-For other extensions, right-click the file and select **Open With... > H5 Viewer (any extension)**.
-
-To set H5 Viewer as default for additional extensions:
-
-```json
-"workbench.editorAssociations": {
-  "*.foo": "h5viewer.viewer"
-}
-```
-
-## Audio Data Support (Experimental)
-
-> **Note:** Audio support is experimental and has not been thoroughly tested. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-The viewer automatically detects audio data inside HDF5/MAT files and shows a collapsible Audio Player panel at the bottom:
-
-**Encoded audio blobs** — Datasets named with audio extensions (`.mp3`, `.wav`, `.flac`, `.ogg`, `.aac`, `.m4a`, `.opus`). Content is decoded using the browser's `AudioContext.decodeAudioData()`.
-
-**PCM sample arrays** — 1D or 2D numeric datasets that look like raw audio (e.g. shape `[160000]` or `[2, 160000]`). Sample rate is read from attributes (`sample_rate`, `sampleRate`, etc.) or defaults to 44100 Hz.
-
-Features: playback controls (play/pause, seek, volume), waveform visualization (Canvas 2D), and spectrogram visualization (FFT via ooura library). Large datasets trigger a warning before loading.
-
-## NumPy .npy Support (Experimental)
-
-> **Note:** NPY support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-Datasets named with `.npy` extension inside HDF5/MAT files are automatically recognized as embedded NumPy arrays. The NPY binary format (v1.0/v2.0/v3.0) is parsed transparently — the viewer shows the actual array shape, dtype, and data instead of raw bytes. Supports all standard NumPy dtypes (int8-64, uint8-64, float16-64, bool). The parsed array is displayed using the standard Line/Heatmap/Matrix visualizations.
-
-## JSON Viewer (Experimental)
-
-> **Note:** JSON support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-Datasets named with `.json` extension are displayed in a collapsible JSON Viewer panel with syntax highlighting, pretty-printing (auto-formats compact JSON to indented), word wrap toggle, and copy-to-clipboard.
-
-## SafeTensors Support (Experimental)
-
-> **Note:** SafeTensors support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-Open `.safetensors` files directly. Tensor names are mapped to a hierarchical tree (dot-separated names become nested groups). Each tensor is loaded on-demand — only the tensor you click is read from disk, even for multi-GB model files. Supports F16, BF16, F32, F64, I8, I16, I32, I64, U8, BOOL dtypes. F16 and BF16 are automatically upcast to F32 for visualization.
-
-## GGUF Support (Experimental)
-
-> **Note:** GGUF support is experimental. If you encounter issues, please [report them](https://github.com/NieeiM/H5-Viewer/issues).
-
-Open `.gguf` model files (llama.cpp / GGML format). Displays all metadata key-value pairs and tensor information. Non-quantized tensors (F32, F16, BF16) can be visualized as Heatmap/Line/Matrix. Quantized tensors (Q4_0, Q4_K, Q5_K, Q6_K, etc.) display their type and size info (dequantization visualization planned for future updates).
-
-## Compression Plugins
-
-Supported HDF5 compression filters: **Blosc**, **Blosc2**, **Bitshuffle**, **BZIP2**, **JPEG**, **LZ4**, **LZF**, **ZFP**, **Zstandard**.
-
-Plugins are loaded automatically on the server side — no configuration needed.
-
-## Platform Support
-
-The extension is fully cross-platform. Both the HDF5 parser and compression plugins are compiled to WebAssembly, so a single package works on **x86_64** and **ARM64** (Linux, macOS, Windows).
-
-## Architecture
-
-```
-Remote Server                          Local Machine
-┌──────────────────────┐              ┌──────────────────────┐
-│  Extension Host      │              │  Webview (Browser)   │
-│  (Node.js)           │              │                      │
-│                      │  postMessage │                      │
-│  h5wasm ──> HDF5     │ <── request  │  DataProvider        │
-│  (reads disk         │ ──> response │    getEntity()       │
-│   directly)          │  (data slice)│    getValue()        │
-│                      │              │                      │
-│  Compression plugins │              │  @h5web/app renders  │
-│  loaded locally      │              │  visualizations      │
-└──────────────────────┘              └──────────────────────┘
-```
+| Switching datasets | Instant (in memory) | RPC request (~ms) |
 
 ## Installation
 
 **From GitHub Release:**
-
 1. Go to [Releases](https://github.com/NieeiM/H5-Viewer/releases)
 2. Download the `.vsix` file
-3. In VS Code: `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
+3. `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
 
 **From source:**
-
 ```bash
 git clone https://github.com/NieeiM/H5-Viewer.git
 cd H5-Viewer
-pnpm install
-pnpm build
+pnpm install && pnpm build
 pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
 
+## All Extensions
+
+Default viewer for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.npy`, `.safetensors`, `.gguf`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+
+For other files: right-click → **Open With... → DataPeek (any extension)**.
+
+```json
+"workbench.editorAssociations": {
+  "*.foo": "datapeek.viewer"
+}
+```
+
+## Experimental Features
+
+The following are functional but not thoroughly tested:
+
+- **MATLAB .mat** (v5/v7/v7.3)
+- **EEG .cnt** (Neuroscan + ANT Neuro)
+- **Audio** playback and spectrogram
+- **SafeTensors** and **GGUF** model files
+- **NPY** and **JSON** embedded datasets
+
+[Report issues](https://github.com/NieeiM/H5-Viewer/issues)
+
+## Platform Support
+
+Single package works on **x86_64** and **ARM64** (Linux, macOS, Windows). All parsers are WebAssembly or pure JavaScript — no native binaries.
+
 ## Credits
 
-Built on top of:
-- [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.com/usnistgov/h5wasm) by ESRF (European Synchrotron Radiation Facility)
-- Audio playback and spectrum visualization adapted from [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview) by sukumo28 (MIT License)
+Built on:
+- [H5Web](https://h5web.panosc.eu/) and [h5wasm](https://github.com/usnistgov/h5wasm) by ESRF
+- Audio visualization adapted from [vscode-audio-preview](https://github.com/sukumo28/vscode-audio-preview) by sukumo28 (MIT)
 - ANT Neuro CNT RAW3 decompression ported from [libeep](https://github.com/mscheltienne/antio) (LGPL-3.0)
 
 ## License
 
-GPL-3.0 (due to mat-for-js dependency)
+GPL-3.0
