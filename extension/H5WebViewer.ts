@@ -20,9 +20,11 @@ import { isGGUFFile } from './gguf-parser.js';
 import { H5Service, type Logger } from './h5-service.js';
 import { MatService } from './mat-service.js';
 import { detectMatVersion, isHdf5File, type MatVersion } from './mat-version.js';
+import { type FileInfo, type Message, MessageType, type RpcRequest } from './models.js';
+import { NpyService } from './npy-service.js';
+import { isNpyBuffer } from './npy-parser.js';
 import { SafeTensorsService } from './safetensors-service.js';
 import { isSafeTensorsFile } from './safetensors-parser.js';
-import { type FileInfo, type Message, MessageType, type RpcRequest } from './models.js';
 
 /** Rough estimate of JSON-serialized size for logging */
 function estimateSize(value: unknown): string {
@@ -302,6 +304,14 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       return this.initCntService(filePath, name, size, sendProgress, logger);
     }
 
+    // .npy files (standalone NumPy arrays)
+    if (ext === '.npy') {
+      sendProgress('Parsing NPY file...');
+      const svc = new NpyService(logger);
+      await svc.init(filePath, (msg) => sendProgress(msg));
+      return { fileInfo: { name, size, format: 'hdf5' as FileInfo['format'] }, dataService: svc };
+    }
+
     // .safetensors files
     if (ext === '.safetensors') {
       sendProgress('Parsing SafeTensors...');
@@ -318,8 +328,26 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       return { fileInfo: { name, size, format: 'gguf' as FileInfo['format'] }, dataService: svc };
     }
 
-    // All other extensions: try HDF5 first, or auto-detect by magic bytes
+    // All other extensions: try auto-detect by magic bytes
     try {
+      // NPY magic: \x93NUMPY
+      {
+        const { openSync, readSync, closeSync } = await import('node:fs');
+        const fd = openSync(filePath, 'r');
+        try {
+          const magic = Buffer.alloc(6);
+          readSync(fd, magic, 0, 6, 0);
+          if (magic[0] === 0x93 && magic[1] === 0x4e && magic[2] === 0x55 && magic[3] === 0x4d && magic[4] === 0x50 && magic[5] === 0x59) {
+            closeSync(fd);
+            sendProgress('Detected NPY format...');
+            const svc = new NpyService(logger);
+            await svc.init(filePath, (msg) => sendProgress(msg));
+            return { fileInfo: { name, size, format: 'hdf5' as FileInfo['format'] }, dataService: svc };
+          }
+        } finally {
+          try { closeSync(fd); } catch { /* already closed */ }
+        }
+      }
       if (isSafeTensorsFile(filePath)) {
         sendProgress('Detected SafeTensors format...');
         const svc = new SafeTensorsService(logger);

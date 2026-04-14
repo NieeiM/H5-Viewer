@@ -19,9 +19,14 @@ import { detectContentType, DETECTION_SAMPLE_SIZE, type ContentCategory } from '
 import type { AudioHint } from './models.js';
 import { parseNpy } from './npy-parser.js';
 import { PLUGINS } from './plugins.js';
+import {
+  parseSafeTensorsHeader, readSafeTensor, SAFETENSOR_DTYPE_MAP,
+  isSafeTensorsFile as isSafeTensorsBuffer,
+} from './safetensors-parser.js';
 
 // Patterns for special dataset names
 const NPY_EXT = /\.npy$/i;
+const SAFETENSORS_EXT = /\.safetensors$/i;
 const JSON_EXT = /\.json$/i;
 
 // We use `any` for h5wasm types since the module is loaded dynamically
