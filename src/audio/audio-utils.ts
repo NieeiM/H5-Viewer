@@ -15,9 +15,10 @@ import Ooura from 'ooura';
 export const WINDOW_SIZES = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
 export const DEFAULT_WINDOW_SIZE_INDEX = 2; // 1024
 export const WAVEFORM_CANVAS_WIDTH = 1000;
-export const WAVEFORM_CANVAS_HEIGHT = 200;
+export const WAVEFORM_CANVAS_HEIGHT = 150;
 export const SPECTROGRAM_CANVAS_WIDTH = 1800;
-export const SPECTROGRAM_CANVAS_HEIGHT = 600;
+export const SPECTROGRAM_CANVAS_HEIGHT = 300;
+export const MAX_SPECTROGRAM_FRAMES = 2000; // Cap frames to prevent OOM on long audio
 export const MIN_DATA_POINTS_PER_PIXEL = 5;
 export const MAX_DOWNSAMPLE_POINTS = 200_000;
 
@@ -62,7 +63,7 @@ export function defaultSettings(sampleRate: number, duration: number, samples?: 
     minFrequency: 0,
     maxFrequency: sampleRate / 2,
     amplitudeRange: -90,
-    frequencyScale: 'linear',
+    frequencyScale: 'mel',
     melFilterNum: 40,
     waveformVisible: true,
     spectrogramVisible: true,
@@ -110,7 +111,13 @@ export function computeSpectrogram(
   const minRectWidth = (2 * windowSize) / 1024;
   const enoughHopSize = Math.trunc((minRectWidth * wholeSampleNum) / SPECTROGRAM_CANVAS_WIDTH);
   const minHopSize = Math.max(1, Math.floor(windowSize / 32));
-  const hopSize = settings.hopSize || Math.max(enoughHopSize, minHopSize);
+  let hopSize = settings.hopSize || Math.max(enoughHopSize, minHopSize);
+
+  // Cap total frames to prevent OOM/hang on long audio
+  const estimatedFrames = Math.ceil(wholeSampleNum / hopSize);
+  if (estimatedFrames > MAX_SPECTROGRAM_FRAMES) {
+    hopSize = Math.ceil(wholeSampleNum / MAX_SPECTROGRAM_FRAMES);
+  }
 
   const halfSize = Math.floor(windowSize / 2);
   const freqPerBin = sampleRate / windowSize;
