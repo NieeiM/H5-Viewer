@@ -196,7 +196,15 @@ export class RemoteH5Api extends DataProviderApi {
   }
 
   public override async getEntity(path: string): Promise<ProvidedEntity> {
-    return this.rpc.call('getEntity', { path }) as Promise<ProvidedEntity>;
+    const entity = await this.rpc.call('getEntity', { path }) as ProvidedEntity;
+
+    // Notify listener when a non-root entity is accessed
+    // This fires on every tree click (both groups and datasets)
+    if (path !== '/') {
+      this._onPathAccess?.(path);
+    }
+
+    return entity;
   }
 
   public override async getValue(
@@ -205,7 +213,7 @@ export class RemoteH5Api extends DataProviderApi {
   ): Promise<unknown> {
     const { dataset, selection } = params;
 
-    // Notify listener that a dataset is being accessed for visualization
+    // Also notify on getValue (redundant but ensures we catch dataset access)
     this._onPathAccess?.(dataset.path);
 
     const raw = await this.rpc.call('getValue', {
