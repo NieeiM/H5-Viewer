@@ -211,6 +211,10 @@ export class CntService {
     throw new Error('JSON viewing is not supported for CNT files');
   }
 
+  async detectDatasetType(_path: string): Promise<unknown> {
+    return { category: 'unknown', mime: '', ext: '', label: 'EEG Channel Data', detectedBy: 'extension' };
+  }
+
   // ---------------------------------------------------------------------------
   // Private: Channel data loading (on-demand)
   // ---------------------------------------------------------------------------

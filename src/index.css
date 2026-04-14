@@ -58,6 +58,26 @@
   font-size: 13px;
 }
 
+.h5v-format-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #fff);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.h5v-mismatch-warning {
+  padding: 6px 12px;
+  background: var(--vscode-inputValidation-warningBackground, #352a05);
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  font-size: 12px;
+  border-bottom: 1px solid var(--vscode-panel-border, #555);
+}
+
 .h5v-back-btn {
   display: flex;
   align-items: center;

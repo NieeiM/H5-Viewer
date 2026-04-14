@@ -322,6 +322,12 @@ export class MatService {
     }
   }
 
+  async detectDatasetType(path: string): Promise<unknown> {
+    const name = path.split('/').pop() || path;
+    const { detectByExtension } = await import('./magic-detect.js');
+    return detectByExtension(name) || { category: 'unknown', mime: '', ext: '', label: 'Unknown', detectedBy: 'extension' };
+  }
+
   // ---------------------------------------------------------------------------
   // Private: Tree building
   // ---------------------------------------------------------------------------

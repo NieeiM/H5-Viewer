@@ -45,7 +45,8 @@ export type RpcMethod =
   | 'getAudioHints'
   | 'getAudioData'
   | 'getJsonHints'
-  | 'getJsonData';
+  | 'getJsonData'
+  | 'detectDatasetType';
 
 // ---- JSON types ----
 
@@ -54,6 +55,10 @@ export interface JsonHint {
   name: string;
   /** Size in bytes of the raw JSON string */
   dataSize: number;
+  /** Detected format label */
+  detectedLabel?: string;
+  /** Warning if extension and content disagree */
+  mismatchWarning?: string;
 }
 
 // ---- Audio types ----
@@ -77,6 +82,19 @@ export interface AudioHint {
   dataSize: number;
   /** Warning message if the data is very large */
   warning?: string;
+  /** Detected MIME type from magic bytes */
+  detectedMime?: string;
+  /** Detected format label (e.g. 'WAV Audio', 'MP3 Audio') */
+  detectedLabel?: string;
+  /** Warning if extension and magic bytes disagree */
+  mismatchWarning?: string;
+}
+
+export interface JsonHintExtra {
+  /** Detected format label */
+  detectedLabel?: string;
+  /** Warning if extension and content disagree */
+  mismatchWarning?: string;
 }
 
 export interface RpcRequest {

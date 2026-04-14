@@ -21,13 +21,27 @@ function deserializeTypedArray(obj: Record<string, unknown>): Float32Array | nul
   return new Float32Array(obj.data as number[]);
 }
 
+interface DetectionInfo {
+  category: string;
+  mime: string;
+  ext: string;
+  label: string;
+  mismatchWarning?: string;
+}
+
 export default function AudioViewer({ rpc, path, name, onBack }: Props) {
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
+  const [detection, setDetection] = useState<DetectionInfo | null>(null);
   const playerRef = useRef<{ seek: (t: number) => void; toggle: () => void } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Detect content type
+  useEffect(() => {
+    rpc.call('detectDatasetType', { path }).then((r) => setDetection(r as DetectionInfo)).catch(() => {});
+  }, [rpc, path]);
 
   // Load audio data
   useEffect(() => {
@@ -116,13 +130,18 @@ export default function AudioViewer({ rpc, path, name, onBack }: Props) {
 
   return (
     <div className="h5v-overlay-inner" ref={containerRef} tabIndex={-1} style={{ outline: 'none' }}>
-      {/* Header with back button */}
+      {/* Header with back button + format badge */}
       <div className="h5v-panel-header">
         <button className="h5v-back-btn" onClick={onBack}>← Back</button>
         <span style={{ fontSize: 16, color: 'var(--vscode-progressBar-background, #4ec9b0)' }}>♪</span>
         <span className="h5v-panel-title">{name}</span>
+        {detection && <span className="h5v-format-badge">{detection.label}</span>}
         <span className="h5v-panel-path">{path}</span>
       </div>
+
+      {detection?.mismatchWarning && (
+        <div className="h5v-mismatch-warning">⚠ {detection.mismatchWarning}</div>
+      )}
 
       {error && <div className="h5v-panel-error">{error}</div>}
       {loading && <div className="h5v-panel-loading"><div className="h5v-spinner" /><span>Loading audio...</span></div>}

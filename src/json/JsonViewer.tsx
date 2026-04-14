@@ -13,11 +13,20 @@ interface Props {
   onBack: () => void;
 }
 
+interface DetectionInfo {
+  category: string; mime: string; ext: string; label: string; mismatchWarning?: string;
+}
+
 export default function JsonViewer({ rpc, path, name, onBack }: Props) {
   const [jsonStr, setJsonStr] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [wordWrap, setWordWrap] = useState(true);
+  const [detection, setDetection] = useState<DetectionInfo | null>(null);
+
+  useEffect(() => {
+    rpc.call('detectDatasetType', { path }).then((r) => setDetection(r as DetectionInfo)).catch(() => {});
+  }, [rpc, path]);
 
   useEffect(() => {
     setLoading(true);
@@ -41,13 +50,18 @@ export default function JsonViewer({ rpc, path, name, onBack }: Props) {
 
   return (
     <div className="h5v-overlay-inner">
-      {/* Header */}
+      {/* Header + format badge */}
       <div className="h5v-panel-header">
         <button className="h5v-back-btn" onClick={onBack}>← Back</button>
         <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--vscode-symbolIcon-objectForeground, #dcdcaa)' }}>{'{ }'}</span>
         <span className="h5v-panel-title">{name}</span>
+        {detection && <span className="h5v-format-badge">{detection.label}</span>}
         <span className="h5v-panel-path">{path}</span>
       </div>
+
+      {detection?.mismatchWarning && (
+        <div className="h5v-mismatch-warning">⚠ {detection.mismatchWarning}</div>
+      )}
 
       {/* Toolbar */}
       <div className="h5v-panel-toolbar">

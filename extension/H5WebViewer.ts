@@ -39,10 +39,11 @@ interface DataService {
   getValue(path: string, selection?: string): unknown;
   getAttrValues(path: string): Record<string, unknown>;
   getSearchablePaths(rootPath: string): string[];
-  getAudioHints(): unknown[];
+  getAudioHints(): unknown[] | Promise<unknown[]>;
   getAudioData(path: string): unknown;
-  getJsonHints(): unknown[];
+  getJsonHints(): unknown[] | Promise<unknown[]>;
   getJsonData(path: string): unknown;
+  detectDatasetType(path: string): unknown | Promise<unknown>;
   close(): void;
 }
 
@@ -205,16 +206,19 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
               result = service.getSearchablePaths(params.path as string);
               break;
             case 'getAudioHints':
-              result = service.getAudioHints();
+              result = await service.getAudioHints();
               break;
             case 'getAudioData':
               result = service.getAudioData(params.path as string);
               break;
             case 'getJsonHints':
-              result = service.getJsonHints();
+              result = await service.getJsonHints();
               break;
             case 'getJsonData':
               result = service.getJsonData(params.path as string);
+              break;
+            case 'detectDatasetType':
+              result = await service.detectDatasetType(params.path as string);
               break;
             default:
               throw new Error(`Unknown RPC method: ${method}`);

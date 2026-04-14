@@ -15,6 +15,7 @@ import {
   makeEncodedBlobHint, makePcmArrayHint,
   extractSampleRate, inferAudioLayout,
 } from './audio-detect.js';
+import { detectContentType, DETECTION_SAMPLE_SIZE, type ContentCategory } from './magic-detect.js';
 import type { AudioHint } from './models.js';
 import { parseNpy } from './npy-parser.js';
 import { PLUGINS } from './plugins.js';
@@ -596,9 +597,39 @@ export class H5Service {
   }
 
   /**
-   * Scan the file tree for datasets that look like audio data.
+   * Read first N bytes of a dataset for magic detection.
    */
-  getAudioHints(): AudioHint[] {
+  private readFirstBytes(path: string, maxBytes: number): Uint8Array | null {
+    try {
+      const dataset = new this.DatasetClass(this.fileId!, path);
+      const shape = dataset.shape;
+      if (!shape || shape.length === 0) return null;
+
+      // Only read from 1D uint8-like datasets
+      if (shape.length === 1 && shape[0] >= maxBytes) {
+        const slice = dataset.slice([[0, maxBytes]]);
+        if (slice instanceof Uint8Array) return slice;
+        if (slice instanceof Int8Array) return new Uint8Array(slice.buffer, slice.byteOffset, slice.byteLength);
+      }
+
+      // Fallback: read full value if small enough
+      const totalElements = shape.reduce((a: number, b: number) => a * b, 1);
+      if (totalElements <= maxBytes * 2) {
+        const val = dataset.value;
+        if (val instanceof Uint8Array) return val.subarray(0, maxBytes);
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Scan the file tree for datasets that look like audio data.
+   * Uses magic bytes detection (priority) + extension name (fallback).
+   */
+  async getAudioHints(): Promise<AudioHint[]> {
     this.ensureOpen();
     const hints: AudioHint[] = [];
     const allPaths = this.h5wasm.get_names(this.fileId!, '/', true) as string[];
@@ -610,17 +641,38 @@ export class H5Service {
         if (kind !== this.h5wasm.H5G_DATASET) continue;
 
         const name = relPath.split('/').pop() || relPath;
+        const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+        const totalBytes = (meta.shape || []).reduce((a: number, b: number) => a * b, 1) * meta.size;
 
-        // Check 1: encoded blob (name ends with audio extension)
+        // Try magic bytes detection on 1D byte arrays
+        const firstBytes = this.readFirstBytes(path, DETECTION_SAMPLE_SIZE);
+        if (firstBytes) {
+          const detection = await detectContentType(name, firstBytes);
+          if (detection.category === 'audio') {
+            const hint = makeEncodedBlobHint(path, name, totalBytes);
+            hint.detectedMime = detection.mime;
+            hint.detectedLabel = detection.label;
+            hint.mismatchWarning = detection.mismatchWarning;
+            hints.push(hint);
+            continue;
+          }
+        }
+
+        // Fallback: check extension name
         if (isAudioByName(name)) {
-          const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
-          const totalBytes = (meta.shape || []).reduce((a: number, b: number) => a * b, 1) * meta.size;
-          hints.push(makeEncodedBlobHint(path, name, totalBytes));
+          const hint = makeEncodedBlobHint(path, name, totalBytes);
+          // Try magic detection for additional info
+          if (firstBytes) {
+            const detection = await detectContentType(name, firstBytes);
+            hint.detectedMime = detection.mime;
+            hint.detectedLabel = detection.label;
+            hint.mismatchWarning = detection.mismatchWarning;
+          }
+          hints.push(hint);
           continue;
         }
 
-        // Check 2: PCM array (shape + dtype match)
-        const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
+        // Check PCM array shape heuristic
         const dtype = parseDType(meta);
         const dtypeClass = (dtype as Record<string, string>)?.class;
         if (isAudioByShape(meta.shape, dtypeClass)) {
@@ -628,7 +680,7 @@ export class H5Service {
           hints.push(makePcmArrayHint(path, name, meta.shape, dtypeClass, attrValues));
         }
       } catch {
-        // Skip datasets that can't be read
+        // Skip
       }
     }
 
@@ -638,8 +690,6 @@ export class H5Service {
 
   /**
    * Read audio data for a specific dataset.
-   * For encoded blobs: returns { type: 'encoded', data: number[] } (raw bytes)
-   * For PCM arrays: returns { type: 'pcm', data: serialized typed array, sampleRate, numChannels, channelFirst }
    */
   getAudioData(path: string): unknown {
     this.ensureOpen();
@@ -647,22 +697,22 @@ export class H5Service {
     const name = path.split('/').pop() || path;
     const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
 
-    if (isAudioByName(name)) {
-      // Encoded blob — read as raw bytes
+    // Check if it's an encoded blob (1D byte array with audio magic or name)
+    const dtype = parseDType(meta);
+    const dtypeClass = (dtype as Record<string, string>)?.class;
+    const isBlob = meta.shape?.length === 1 && (dtypeClass === 'Integer') && meta.size === 1;
+
+    if (isBlob || isAudioByName(name)) {
       const dataset = new this.DatasetClass(this.fileId!, path);
       const value = dataset.value;
       let bytes: number[];
-      if (value instanceof Uint8Array) {
-        bytes = Array.from(value);
-      } else if (Array.isArray(value)) {
-        bytes = value as number[];
-      } else {
-        bytes = Array.from(new Uint8Array((value as ArrayBuffer)));
-      }
+      if (value instanceof Uint8Array) bytes = Array.from(value);
+      else if (Array.isArray(value)) bytes = value as number[];
+      else bytes = Array.from(new Uint8Array(value as ArrayBuffer));
       return { type: 'encoded', data: bytes };
     }
 
-    // PCM array — read and serialize
+    // PCM array
     const dataset = new this.DatasetClass(this.fileId!, path);
     const value = dataset.value;
     const serialized = serializeValue(value);
@@ -670,20 +720,13 @@ export class H5Service {
     const attrValues = this.getAttrValues(path);
     const sampleRate = extractSampleRate(attrValues) || 0;
 
-    return {
-      type: 'pcm',
-      data: serialized,
-      sampleRate,
-      numChannels,
-      numSamples,
-      channelFirst,
-    };
+    return { type: 'pcm', data: serialized, sampleRate, numChannels, numSamples, channelFirst };
   }
 
   /**
-   * Scan for .json datasets in the file.
+   * Scan for JSON datasets. Uses magic bytes + extension detection.
    */
-  getJsonHints(): import('./models.js').JsonHint[] {
+  async getJsonHints(): Promise<import('./models.js').JsonHint[]> {
     this.ensureOpen();
     const hints: import('./models.js').JsonHint[] = [];
     const allPaths = this.h5wasm.get_names(this.fileId!, '/', true) as string[];
@@ -694,11 +737,34 @@ export class H5Service {
         const kind = this.h5wasm.get_type(this.fileId!, path) as number;
         if (kind !== this.h5wasm.H5G_DATASET) continue;
         const name = relPath.split('/').pop() || relPath;
-        if (!JSON_EXT.test(name)) continue;
 
         const meta = this.h5wasm.get_dataset_metadata(this.fileId!, path) as Metadata;
         const totalBytes = (meta.shape || []).reduce((a: number, b: number) => a * b, 1) * meta.size;
-        hints.push({ path, name, dataSize: totalBytes });
+
+        // Try magic detection on byte arrays
+        const firstBytes = this.readFirstBytes(path, DETECTION_SAMPLE_SIZE);
+        if (firstBytes) {
+          const detection = await detectContentType(name, firstBytes);
+          if (detection.category === 'json') {
+            hints.push({
+              path, name, dataSize: totalBytes,
+              detectedLabel: detection.label,
+              mismatchWarning: detection.mismatchWarning,
+            });
+            continue;
+          }
+        }
+
+        // Fallback: extension check
+        if (JSON_EXT.test(name)) {
+          hints.push({ path, name, dataSize: totalBytes });
+          continue;
+        }
+
+        // Also detect JSON from string-type datasets with .json name
+        if (meta.type === 3 /* H5T_STRING */ && JSON_EXT.test(name)) {
+          hints.push({ path, name, dataSize: totalBytes });
+        }
       } catch {
         // skip
       }
@@ -739,6 +805,22 @@ export class H5Service {
       // Not valid JSON — return as-is
       return { json: str, parsed: null };
     }
+  }
+
+  /**
+   * Detect the content type of a dataset using magic bytes + extension.
+   * Returns { category, mime, ext, label, mismatchWarning? }
+   */
+  async detectDatasetType(path: string): Promise<unknown> {
+    this.ensureOpen();
+    const name = path.split('/').pop() || path;
+    const firstBytes = this.readFirstBytes(path, DETECTION_SAMPLE_SIZE);
+    if (firstBytes) {
+      return detectContentType(name, firstBytes);
+    }
+    // No bytes available — fall back to extension only
+    const { detectByExtension } = await import('./magic-detect.js');
+    return detectByExtension(name) || { category: 'unknown', mime: '', ext: '', label: 'Unknown', detectedBy: 'extension' };
   }
 
   // ---- Private helpers ----
