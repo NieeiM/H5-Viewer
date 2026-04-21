@@ -1,4 +1,4 @@
-# DataPeek
+# H5 Viewer
 
 [![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
 [![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
@@ -39,9 +39,9 @@
 
 原版 [vscode-h5web](https://github.com/silx-kit/vscode-h5web) 将整个文件传输到本地浏览器解析。500 MB 文件 = 500 MB 网络传输。超过 2 GB 的文件无法打开。
 
-**DataPeek 在远程服务器上运行解析器**，仅发送你正在查看的数据：
+**H5 Viewer 在远程服务器上运行解析器**，仅发送你正在查看的数据：
 
-| | 原版 H5Web | DataPeek |
+| | 原版 H5Web | H5 Viewer |
 |---|---|---|
 | 打开 500 MB 文件 | 传输 500 MB | 传输约 10 KB 元数据 |
 | 文件大小限制 | 2 GB | **无限制** |
@@ -66,11 +66,11 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 默认打开：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.npy`、`.safetensors`、`.gguf`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
 
-其他文件：右键 → **打开方式... → DataPeek (any extension)**。
+其他文件：右键 → **打开方式... → H5 Viewer (any extension)**。
 
 ```json
 "workbench.editorAssociations": {
-  "*.foo": "datapeek.viewer"
+  "*.foo": "h5viewer.viewer"
 }
 ```
 

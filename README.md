@@ -1,4 +1,4 @@
-# DataPeek
+# H5 Viewer
 
 [![GitHub](https://img.shields.io/github/license/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/blob/main/LICENSE.md)
 [![GitHub Release](https://img.shields.io/github/v/release/NieeiM/H5-Viewer)](https://github.com/NieeiM/H5-Viewer/releases)
@@ -39,9 +39,9 @@ Format is auto-detected from file header (magic bytes), not just extension.
 
 The original [vscode-h5web](https://github.com/silx-kit/vscode-h5web) transfers the entire file to the local browser for parsing. A 500 MB file = 500 MB network transfer. Files over 2 GB can't open at all.
 
-**DataPeek runs the parser on the remote server** and sends only the data you're looking at:
+**H5 Viewer runs the parser on the remote server** and sends only the data you're looking at:
 
-| | Original H5Web | DataPeek |
+| | Original H5Web | H5 Viewer |
 |---|---|---|
 | Open a 500 MB file | Transfer 500 MB | Transfer ~10 KB metadata |
 | File size limit | 2 GB | **None** |
@@ -66,11 +66,11 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 Default viewer for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.npy`, `.safetensors`, `.gguf`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
 
-For other files: right-click → **Open With... → DataPeek (any extension)**.
+For other files: right-click → **Open With... → H5 Viewer (any extension)**.
 
 ```json
 "workbench.editorAssociations": {
-  "*.foo": "datapeek.viewer"
+  "*.foo": "h5viewer.viewer"
 }
 ```
 

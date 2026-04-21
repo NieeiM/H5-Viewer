@@ -1,8 +1,8 @@
 {
-  "name": "datapeek",
-  "displayName": "DataPeek",
+  "name": "vscode-h5-viewer",
+  "displayName": "H5 Viewer — HDF5 / SafeTensors / GGUF / MAT / NPY / Audio",
   "publisher": "meijiahao",
-  "description": "Visualize scientific data, ML models, audio, and more — right inside VS Code",
+  "description": "Visualize scientific data, ML models, audio, and more — HDF5, SafeTensors, GGUF, MAT, NPY, CNT, JSON",
   "version": "2.0.0",
   "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
@@ -30,8 +30,8 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "datapeek.viewer",
-        "displayName": "DataPeek",
+        "viewType": "h5viewer.viewer",
+        "displayName": "H5 Viewer",
         "selector": [
           {
             "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad,mat,cnt,npy,safetensors,gguf}"
@@ -40,8 +40,8 @@
         "priority": "default"
       },
       {
-        "viewType": "datapeek.fallback-viewer",
-        "displayName": "DataPeek (any extension)",
+        "viewType": "h5viewer.fallback-viewer",
+        "displayName": "H5 Viewer (any extension)",
         "selector": [
           {
             "filenamePattern": "*"
