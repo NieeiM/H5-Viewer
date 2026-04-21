@@ -65,7 +65,7 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 ## 全部扩展名
 
-默认打开：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.npy`、`.safetensors`、`.gguf`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
+默认打开：`.h5`、`.hdf`、`.hdf5`、`.hf5`、`.mat`、`.cnt`、`.npy`、`.safetensors`、`.gguf`、`.pt`、`.pth`、`.bin`、`.pkl`、`.nx`、`.nxs`、`.nx5`、`.nexus`、`.cxi`、`.nc`、`.nc4`、`.loom`、`.jld2`、`.h5ebsd`、`.edaxh5`、`.oh5`、`.dream3d`、`.geoh5`、`.h5oina`、`.h5ad`。
 
 其他文件：右键 → **打开方式... → H5 Viewer (any extension)**。
 
@@ -82,7 +82,7 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 - **MATLAB .mat**（v5/v7/v7.3）
 - **脑电 .cnt**（Neuroscan + ANT Neuro）
 - **音频**播放和频谱图
-- **SafeTensors** 和 **GGUF** 模型文件
+- **SafeTensors**、**GGUF** 和 **PyTorch**（.pt/.pth/.bin/.pkl）模型文件
 - **NPY** 和 **JSON** 内嵌数据集
 
 [反馈问题](https://github.com/NieeiM/H5-Viewer/issues)
