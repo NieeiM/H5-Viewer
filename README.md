@@ -18,6 +18,7 @@ Optimized for Remote SSH. No file transfer, no size limit.
 | **NumPy** | `.npy` | Standalone files or blobs inside HDF5. Parsed transparently — shows real shape/dtype |
 | **SafeTensors** | `.safetensors` | HuggingFace model format. On-demand tensor loading, even for multi-GB files |
 | **GGUF** | `.gguf` | llama.cpp model format. Metadata + tensor tree. Non-quantized tensors visualizable |
+| **PyTorch** | `.pt` `.pth` `.bin` `.pkl` | Checkpoint files (ZIP + pickle). Tensor weights, optimizer state, scalars |
 | **EEG (Neuroscan)** | `.cnt` | Binary format. Random-access channel loading |
 | **EEG (ANT Neuro)** | `.cnt` | RIFF/RAW3 compressed. Epoch-based decompression |
 | **Audio blobs** | inside HDF5/MAT | `.wav` `.mp3` `.flac` `.ogg` `.aac` named datasets auto-detected |
@@ -64,7 +65,7 @@ pnpm dlx @vscode/vsce package --no-dependencies --allow-missing-repository
 
 ## All Extensions
 
-Default viewer for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.npy`, `.safetensors`, `.gguf`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
+Default viewer for: `.h5`, `.hdf`, `.hdf5`, `.hf5`, `.mat`, `.cnt`, `.npy`, `.safetensors`, `.gguf`, `.pt`, `.pth`, `.bin`, `.pkl`, `.nx`, `.nxs`, `.nx5`, `.nexus`, `.cxi`, `.nc`, `.nc4`, `.loom`, `.jld2`, `.h5ebsd`, `.edaxh5`, `.oh5`, `.dream3d`, `.geoh5`, `.h5oina`, `.h5ad`.
 
 For other files: right-click → **Open With... → H5 Viewer (any extension)**.
 
@@ -81,7 +82,7 @@ The following are functional but not thoroughly tested:
 - **MATLAB .mat** (v5/v7/v7.3)
 - **EEG .cnt** (Neuroscan + ANT Neuro)
 - **Audio** playback and spectrogram
-- **SafeTensors** and **GGUF** model files
+- **SafeTensors**, **GGUF**, and **PyTorch** (.pt/.pth/.bin/.pkl) model files
 - **NPY** and **JSON** embedded datasets
 
 [Report issues](https://github.com/NieeiM/H5-Viewer/issues)

@@ -18,6 +18,7 @@
 | **NumPy** | `.npy` | 独立文件或 HDF5 内嵌 blob。透明解析，显示真实的形状和数据类型 |
 | **SafeTensors** | `.safetensors` | HuggingFace 模型格式。按需加载 tensor，支持多 GB 文件 |
 | **GGUF** | `.gguf` | llama.cpp 模型格式。元数据 + tensor 树。非量化 tensor 可可视化 |
+| **PyTorch** | `.pt` `.pth` `.bin` `.pkl` | Checkpoint 文件（ZIP + pickle）。Tensor 权重、优化器状态、标量 |
 | **脑电 (Neuroscan)** | `.cnt` | 二进制格式。随机访问通道加载 |
 | **脑电 (ANT Neuro)** | `.cnt` | RIFF/RAW3 压缩格式。按 epoch 解压 |
 | **音频 blob** | HDF5/MAT 内嵌 | `.wav` `.mp3` `.flac` `.ogg` `.aac` 命名的 dataset 自动检测 |

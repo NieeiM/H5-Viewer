@@ -3,7 +3,7 @@
   "displayName": "H5 Viewer — HDF5 / SafeTensors / GGUF / MAT / NPY / Audio",
   "publisher": "meijiahao",
   "description": "Visualize scientific data, ML models, audio, and more — HDF5, SafeTensors, GGUF, MAT, NPY, CNT, JSON",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {
@@ -34,7 +34,7 @@
         "displayName": "H5 Viewer",
         "selector": [
           {
-            "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad,mat,cnt,npy,safetensors,gguf}"
+            "filenamePattern": "*.{h5,hdf,hdf5,hf5,nx,nxs,nx5,nexus,cxi,nc,nc4,loom,jld2,h5ebsd,edaxh5,oh5,dream3d,geoh5,h5oina,h5ad,mat,cnt,npy,safetensors,gguf,pt,pth,bin,pkl}"
           }
         ],
         "priority": "default"

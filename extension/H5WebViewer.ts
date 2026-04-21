@@ -22,7 +22,8 @@ import { MatService } from './mat-service.js';
 import { detectMatVersion, isHdf5File, type MatVersion } from './mat-version.js';
 import { type FileInfo, type Message, MessageType, type RpcRequest } from './models.js';
 import { NpyService } from './npy-service.js';
-import { isNpyBuffer } from './npy-parser.js';
+import { isPyTorchFile } from './pytorch-parser.js';
+import { PyTorchService } from './pytorch-service.js';
 import { SafeTensorsService } from './safetensors-service.js';
 import { isSafeTensorsFile } from './safetensors-parser.js';
 
@@ -312,6 +313,19 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
       return { fileInfo: { name, size, format: 'hdf5' as FileInfo['format'] }, dataService: svc };
     }
 
+    // .pt / .pth / .bin / .pkl files (PyTorch checkpoints)
+    if (ext === '.pt' || ext === '.pth' || ext === '.bin' || ext === '.pkl') {
+      // These extensions are ambiguous — .bin/.pkl could be non-PyTorch.
+      // Check if it's actually a ZIP file (PyTorch format).
+      if (isPyTorchFile(filePath)) {
+        sendProgress('Parsing PyTorch checkpoint...');
+        const svc = new PyTorchService(logger);
+        await svc.init(filePath, (msg) => sendProgress(msg));
+        return { fileInfo: { name, size, format: 'pytorch' as FileInfo['format'] }, dataService: svc };
+      }
+      // Not a PyTorch ZIP — fall through to other detection
+    }
+
     // .safetensors files
     if (ext === '.safetensors') {
       sendProgress('Parsing SafeTensors...');
@@ -347,6 +361,12 @@ export default class H5WebViewer implements CustomReadonlyEditorProvider {
         } finally {
           try { closeSync(fd); } catch { /* already closed */ }
         }
+      }
+      if (isPyTorchFile(filePath)) {
+        sendProgress('Detected PyTorch checkpoint...');
+        const svc = new PyTorchService(logger);
+        await svc.init(filePath, (msg) => sendProgress(msg));
+        return { fileInfo: { name, size, format: 'pytorch' as FileInfo['format'] }, dataService: svc };
       }
       if (isSafeTensorsFile(filePath)) {
         sendProgress('Detected SafeTensors format...');
