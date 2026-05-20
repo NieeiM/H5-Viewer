@@ -1,5 +1,14 @@
 # Changelog
 
+## [v2.2.0]
+
+- **PyTorch: On-demand lazy loading for large checkpoints**
+  - Replaced `execSync('unzip ...')` with a pure Node.js ZIP central directory parser (ZIP64 support)
+  - Tensor data is now read on demand via positioned reads (`pread`) — no full extraction
+  - Enables opening 20+ GB `.pth` files instantly (init < 100ms vs previous 30s timeout)
+  - Zero temp disk usage, minimal memory footprint (~1 MB for metadata only)
+  - Supports both legacy `data/` and new `.data/` storage paths (PyTorch 2.x+)
+
 ## [v0.2.1](https://github.com/silx-kit/vscode-h5web/compare/v0.2.0...v0.2.1)
 
 - 📂 Add **JPEG** compression plugin

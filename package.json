@@ -3,7 +3,7 @@
   "displayName": "H5 Viewer — HDF5 / PyTorch / SafeTensors / GGUF / MAT / NPY / Audio",
   "publisher": "meijiahao",
   "description": "Visualize scientific data, ML models, audio — HDF5, PyTorch, SafeTensors, GGUF, MAT, NPY, CNT, JSON",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {

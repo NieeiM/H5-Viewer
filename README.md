@@ -18,7 +18,7 @@ Optimized for Remote SSH. No file transfer, no size limit.
 | **NumPy** | `.npy` | Standalone files or blobs inside HDF5. Parsed transparently — shows real shape/dtype |
 | **SafeTensors** | `.safetensors` | HuggingFace model format. On-demand tensor loading, even for multi-GB files |
 | **GGUF** | `.gguf` | llama.cpp model format. Metadata + tensor tree. Non-quantized tensors visualizable |
-| **PyTorch** | `.pt` `.pth` `.bin` `.pkl` | Checkpoint files (ZIP + pickle). Tensor weights, optimizer state, scalars |
+| **PyTorch** | `.pt` `.pth` `.bin` `.pkl` | Checkpoint files (ZIP + pickle). On-demand tensor loading, no file size limit |
 | **EEG (Neuroscan)** | `.cnt` | Binary format. Random-access channel loading |
 | **EEG (ANT Neuro)** | `.cnt` | RIFF/RAW3 compressed. Epoch-based decompression |
 | **Audio blobs** | inside HDF5/MAT | `.wav` `.mp3` `.flac` `.ogg` `.aac` named datasets auto-detected |

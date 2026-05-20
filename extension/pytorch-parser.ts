@@ -7,17 +7,17 @@
  *   {prefix}/version      — serialization version (usually "3")
  *   {prefix}/byteorder    — "little"
  *
- * This parser implements a minimal pickle VM that handles the opcodes
- * used by PyTorch's serialization, plus ZIP extraction via Node.js zlib.
+ * This parser implements:
+ *   1. A minimal ZIP central directory reader (with ZIP64 support) for random access
+ *   2. A minimal pickle VM that handles the opcodes used by PyTorch's serialization
+ *   3. On-demand tensor storage reading via positioned reads (pread)
  *
  * It does NOT execute arbitrary Python code — only recognizes known
  * PyTorch patterns like torch.FloatStorage and _rebuild_tensor_v2.
  */
 
-import { readFileSync, openSync, readSync, closeSync, mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { openSync, readSync, closeSync, statSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,14 +29,24 @@ export interface TensorRef {
   storageKey: string;  // "0", "1", "2", ...
   device: string;      // "cpu", "cuda:0", etc.
   numElements: number;
+  storageOffset: number; // offset within storage in elements
   shape: number[];
   stride: number[];
 }
 
-export interface ParsedCheckpoint {
-  data: unknown;              // The deserialized Python object (dict, list, etc.)
-  tensorStorages: Map<string, Buffer>; // key → raw bytes
-  prefix: string;             // ZIP prefix (e.g. "optimizer")
+export interface ZipEntry {
+  fileName: string;
+  compressionMethod: number;  // 0=STORED, 8=DEFLATE
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+}
+
+export interface PyTorchCheckpointHeader {
+  filePath: string;
+  prefix: string;
+  data: unknown;  // The unpickled Python object (dict, OrderedDict, etc.)
+  storageEntries: Map<string, ZipEntry>;  // storage key → ZIP entry
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +82,246 @@ const STORAGE_DTYPE: Record<string, string> = {
 };
 
 export { STORAGE_BYTES, STORAGE_DTYPE };
+
+// ---------------------------------------------------------------------------
+// ZIP central directory parser (with ZIP64 support)
+// ---------------------------------------------------------------------------
+
+const EOCD_SIGNATURE = 0x06054b50;
+const EOCD64_LOCATOR_SIGNATURE = 0x07064b50;
+const EOCD64_SIGNATURE = 0x06064b50;
+const CD_ENTRY_SIGNATURE = 0x02014b50;
+const LOCAL_HEADER_SIGNATURE = 0x04034b50;
+const ZIP64_EXTRA_FIELD_ID = 0x0001;
+
+function parseZipCentralDirectory(filePath: string): ZipEntry[] {
+  const fd = openSync(filePath, 'r');
+  try {
+    const fileSize = statSync(filePath).size;
+
+    // Read the tail of the file to find the EOCD record
+    const tailSize = Math.min(65558, fileSize);
+    const tailBuf = Buffer.alloc(tailSize);
+    readSync(fd, tailBuf, 0, tailSize, fileSize - tailSize);
+
+    // Scan backwards for EOCD signature
+    let eocdPos = -1;
+    for (let i = tailSize - 22; i >= 0; i--) {
+      if (tailBuf.readUInt32LE(i) === EOCD_SIGNATURE) {
+        eocdPos = i;
+        break;
+      }
+    }
+    if (eocdPos === -1) {
+      throw new Error('Not a valid ZIP file: End of Central Directory not found');
+    }
+
+    // Parse EOCD
+    let cdSize = tailBuf.readUInt32LE(eocdPos + 12);
+    let cdOffset = tailBuf.readUInt32LE(eocdPos + 16);
+
+    // Check for ZIP64
+    if (cdOffset === 0xFFFFFFFF || cdSize === 0xFFFFFFFF) {
+      // Look for ZIP64 EOCD Locator before the EOCD
+      const eocdAbsolutePos = fileSize - tailSize + eocdPos;
+      if (eocdAbsolutePos >= 20) {
+        const locatorBuf = Buffer.alloc(20);
+        readSync(fd, locatorBuf, 0, 20, eocdAbsolutePos - 20);
+        if (locatorBuf.readUInt32LE(0) === EOCD64_LOCATOR_SIGNATURE) {
+          // Read ZIP64 EOCD offset (8 bytes at position 8 in locator)
+          const eocd64Offset = Number(locatorBuf.readBigUInt64LE(8));
+
+          // Read ZIP64 EOCD Record
+          const eocd64Buf = Buffer.alloc(56);
+          readSync(fd, eocd64Buf, 0, 56, eocd64Offset);
+          if (eocd64Buf.readUInt32LE(0) === EOCD64_SIGNATURE) {
+            cdSize = Number(eocd64Buf.readBigUInt64LE(40));
+            cdOffset = Number(eocd64Buf.readBigUInt64LE(48));
+          }
+        }
+      }
+    }
+
+    // Read the entire Central Directory
+    const cdBuf = Buffer.alloc(cdSize);
+    readSync(fd, cdBuf, 0, cdSize, cdOffset);
+
+    // Parse Central Directory entries
+    const entries: ZipEntry[] = [];
+    let pos = 0;
+
+    while (pos + 46 <= cdSize) {
+      if (cdBuf.readUInt32LE(pos) !== CD_ENTRY_SIGNATURE) break;
+
+      const compressionMethod = cdBuf.readUInt16LE(pos + 10);
+      let compressedSize = cdBuf.readUInt32LE(pos + 20);
+      let uncompressedSize = cdBuf.readUInt32LE(pos + 24);
+      const fileNameLen = cdBuf.readUInt16LE(pos + 28);
+      const extraFieldLen = cdBuf.readUInt16LE(pos + 30);
+      const commentLen = cdBuf.readUInt16LE(pos + 32);
+      let localHeaderOffset = cdBuf.readUInt32LE(pos + 42);
+
+      const fileName = cdBuf.toString('utf-8', pos + 46, pos + 46 + fileNameLen);
+
+      // Parse ZIP64 extended information extra field if needed
+      if (compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF || localHeaderOffset === 0xFFFFFFFF) {
+        const extraStart = pos + 46 + fileNameLen;
+        const extraEnd = extraStart + extraFieldLen;
+        let ePos = extraStart;
+        while (ePos + 4 <= extraEnd) {
+          const headerId = cdBuf.readUInt16LE(ePos);
+          const dataSize = cdBuf.readUInt16LE(ePos + 2);
+          if (headerId === ZIP64_EXTRA_FIELD_ID) {
+            let fieldPos = ePos + 4;
+            if (uncompressedSize === 0xFFFFFFFF) {
+              uncompressedSize = Number(cdBuf.readBigUInt64LE(fieldPos));
+              fieldPos += 8;
+            }
+            if (compressedSize === 0xFFFFFFFF) {
+              compressedSize = Number(cdBuf.readBigUInt64LE(fieldPos));
+              fieldPos += 8;
+            }
+            if (localHeaderOffset === 0xFFFFFFFF) {
+              localHeaderOffset = Number(cdBuf.readBigUInt64LE(fieldPos));
+            }
+            break;
+          }
+          ePos += 4 + dataSize;
+        }
+      }
+
+      entries.push({ fileName, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
+      pos += 46 + fileNameLen + extraFieldLen + commentLen;
+    }
+
+    return entries;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function readZipEntry(fd: number, entry: ZipEntry): Buffer {
+  // Read local file header to determine data offset
+  const lhBuf = Buffer.alloc(30);
+  readSync(fd, lhBuf, 0, 30, entry.localHeaderOffset);
+
+  if (lhBuf.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
+    throw new Error('Corrupt ZIP: invalid local file header signature');
+  }
+
+  const fileNameLen = lhBuf.readUInt16LE(26);
+  const extraFieldLen = lhBuf.readUInt16LE(28);
+  const dataStart = entry.localHeaderOffset + 30 + fileNameLen + extraFieldLen;
+
+  if (entry.compressionMethod === 0) {
+    // STORED: read raw bytes directly
+    const buf = Buffer.alloc(entry.uncompressedSize);
+    readSync(fd, buf, 0, entry.uncompressedSize, dataStart);
+    return buf;
+  }
+
+  if (entry.compressionMethod === 8) {
+    // DEFLATE: read compressed data, then inflate
+    const compressed = Buffer.alloc(entry.compressedSize);
+    readSync(fd, compressed, 0, entry.compressedSize, dataStart);
+    return inflateRawSync(compressed);
+  }
+
+  throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}`);
+}
+
+// ---------------------------------------------------------------------------
+// Public API: Parse header (metadata only, no tensor data)
+// ---------------------------------------------------------------------------
+
+export function parsePyTorchHeader(filePath: string): PyTorchCheckpointHeader {
+  const entries = parseZipCentralDirectory(filePath);
+
+  // Find data.pkl to determine prefix
+  const pklEntry = entries.find(e => e.fileName.endsWith('/data.pkl'));
+  if (!pklEntry) {
+    throw new Error('Missing data.pkl in PyTorch checkpoint');
+  }
+
+  const prefix = pklEntry.fileName.split('/')[0] || '';
+
+  // Extract and parse data.pkl
+  const fd = openSync(filePath, 'r');
+  let data: unknown;
+  try {
+    const pklBuf = readZipEntry(fd, pklEntry);
+    data = unpickle(pklBuf);
+  } finally {
+    closeSync(fd);
+  }
+
+  // Build storage entries map: "0" → ZipEntry, "1" → ZipEntry, etc.
+  // PyTorch uses "data/" (older) or ".data/" (newer, 2.x+) for tensor storage
+  const storageEntries = new Map<string, ZipEntry>();
+  const dataPrefixes = prefix
+    ? [`${prefix}/data/`, `${prefix}/.data/`]
+    : ['data/', '.data/'];
+  for (const entry of entries) {
+    for (const dp of dataPrefixes) {
+      if (entry.fileName.startsWith(dp) && entry.fileName.length > dp.length) {
+        const key = entry.fileName.slice(dp.length);
+        if (key && key !== 'serialization_id') {
+          storageEntries.set(key, entry);
+        }
+        break;
+      }
+    }
+  }
+
+  return { filePath, prefix, data, storageEntries };
+}
+
+// ---------------------------------------------------------------------------
+// Public API: Read tensor storage on demand
+// ---------------------------------------------------------------------------
+
+export function readPyTorchStorage(
+  filePath: string,
+  header: PyTorchCheckpointHeader,
+  storageKey: string,
+  byteOffset: number,
+  byteLength: number,
+): Buffer {
+  const entry = header.storageEntries.get(storageKey);
+  if (!entry) {
+    throw new Error(`Tensor storage "${storageKey}" not found in checkpoint`);
+  }
+
+  const fd = openSync(filePath, 'r');
+  try {
+    // Read local file header to determine data start
+    const lhBuf = Buffer.alloc(30);
+    readSync(fd, lhBuf, 0, 30, entry.localHeaderOffset);
+
+    if (lhBuf.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
+      throw new Error('Corrupt ZIP: invalid local file header signature');
+    }
+
+    const fileNameLen = lhBuf.readUInt16LE(26);
+    const extraFieldLen = lhBuf.readUInt16LE(28);
+    const dataStart = entry.localHeaderOffset + 30 + fileNameLen + extraFieldLen;
+
+    if (entry.compressionMethod === 0) {
+      // STORED: direct random-access read of just the needed bytes
+      const buf = Buffer.alloc(byteLength);
+      readSync(fd, buf, 0, byteLength, dataStart + byteOffset);
+      return buf;
+    }
+
+    // DEFLATE: must decompress entire entry, then slice
+    const compressed = Buffer.alloc(entry.compressedSize);
+    readSync(fd, compressed, 0, entry.compressedSize, dataStart);
+    const full = inflateRawSync(compressed);
+    return full.subarray(byteOffset, byteOffset + byteLength) as Buffer;
+  } finally {
+    closeSync(fd);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Pickle opcodes (protocol 2, subset used by PyTorch)
@@ -315,6 +565,7 @@ export function unpickle(buf: Buffer): unknown {
               storageKey,
               device,
               numElements,
+              storageOffset: Number(offset) || 0,
               shape: shape || [],
               stride: stride || [],
             };
@@ -382,49 +633,9 @@ export function unpickle(buf: Buffer): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// ZIP extraction + checkpoint parsing
+// isPyTorchFile — quick magic-byte check
 // ---------------------------------------------------------------------------
 
-export function parsePyTorchCheckpoint(filePath: string): ParsedCheckpoint {
-  // Extract ZIP to temp dir
-  const tmpDir = mkdtempSync(join(tmpdir(), 'pytorch-'));
-
-  try {
-    execSync(`unzip -o -q "${filePath}" -d "${tmpDir}"`, { timeout: 30000 });
-
-    // Find the prefix (first directory inside ZIP)
-    const entries = readdirSync(tmpDir);
-    const prefix = entries[0] || '';
-    const baseDir = join(tmpDir, prefix);
-
-    // Read and parse data.pkl
-    const pklPath = join(baseDir, 'data.pkl');
-    if (!existsSync(pklPath)) {
-      throw new Error('Missing data.pkl in PyTorch checkpoint');
-    }
-    const pklBuf = readFileSync(pklPath);
-    const data = unpickle(pklBuf);
-
-    // Read tensor storage files
-    const tensorStorages = new Map<string, Buffer>();
-    const dataDir = join(baseDir, 'data');
-    if (existsSync(dataDir)) {
-      for (const name of readdirSync(dataDir)) {
-        if (name === 'serialization_id') continue;
-        tensorStorages.set(name, readFileSync(join(dataDir, name)));
-      }
-    }
-
-    return { data, tensorStorages, prefix };
-  } finally {
-    // Cleanup temp dir
-    try { rmSync(tmpDir, { recursive: true }); } catch { /* best effort */ }
-  }
-}
-
-/**
- * Check if a file is a PyTorch checkpoint (ZIP with data.pkl inside).
- */
 export function isPyTorchFile(filePath: string): boolean {
   try {
     const fd = openSync(filePath, 'r');

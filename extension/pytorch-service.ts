@@ -3,12 +3,16 @@
  *
  * Parses torch.save() ZIP files, builds a virtual HDF5-like tree
  * from the deserialized Python dict structure.
+ *
+ * Uses lazy loading: only data.pkl is parsed at init time.
+ * Tensor storage data is read on demand when getValue() is called.
  */
 
 import { statSync } from 'node:fs';
 import type { Logger } from './h5-service.js';
 import {
-  parsePyTorchCheckpoint, type TensorRef, type ParsedCheckpoint,
+  parsePyTorchHeader, readPyTorchStorage,
+  type PyTorchCheckpointHeader, type TensorRef,
   STORAGE_BYTES, STORAGE_DTYPE,
 } from './pytorch-parser.js';
 
@@ -47,7 +51,8 @@ const DTYPE_TO_H5: Record<string, unknown> = {
 };
 
 export class PyTorchService {
-  private checkpoint: ParsedCheckpoint | null = null;
+  private header: PyTorchCheckpointHeader | null = null;
+  private filePath: string = '';
   private root: VNode | null = null;
   private nodeMap = new Map<string, VNode>();
   private log: Logger;
@@ -60,18 +65,20 @@ export class PyTorchService {
     const t0 = performance.now();
     const { size } = statSync(filePath);
 
-    onProgress?.(`Extracting PyTorch checkpoint (${(size / 1024 / 1024).toFixed(1)} MB)...`);
-    this.checkpoint = parsePyTorchCheckpoint(filePath);
+    onProgress?.(`Parsing PyTorch checkpoint metadata (${(size / 1024 / 1024).toFixed(1)} MB)...`);
+    this.filePath = filePath;
+    this.header = parsePyTorchHeader(filePath);
 
     onProgress?.('Building object tree...');
     this.buildTree();
 
-    this.log.info(`[PyTorch] Parsed in ${(performance.now() - t0).toFixed(0)} ms, prefix="${this.checkpoint.prefix}", storages: ${this.checkpoint.tensorStorages.size}, nodes: ${this.nodeMap.size}`);
+    this.log.info(`[PyTorch] Parsed in ${(performance.now() - t0).toFixed(0)} ms, prefix="${this.header.prefix}", storages: ${this.header.storageEntries.size}, nodes: ${this.nodeMap.size}`);
     onProgress?.('Ready');
   }
 
   close(): void {
-    this.checkpoint = null;
+    this.header = null;
+    this.filePath = '';
     this.root = null;
     this.nodeMap.clear();
   }
@@ -107,8 +114,8 @@ export class PyTorchService {
     // Scalar / simple value
     if (node.value !== undefined && !node._tensorRef) return node.value;
 
-    // Tensor
-    if (node._tensorRef && this.checkpoint) {
+    // Tensor — read on demand from disk
+    if (node._tensorRef && this.header) {
       return this.readTensor(node._tensorRef);
     }
 
@@ -138,19 +145,21 @@ export class PyTorchService {
   // ---------------------------------------------------------------------------
 
   private readTensor(ref: TensorRef): unknown {
-    if (!this.checkpoint) throw new Error('Checkpoint not loaded');
-
-    const storageBuf = this.checkpoint.tensorStorages.get(ref.storageKey);
-    if (!storageBuf) {
-      return `[Tensor storage "${ref.storageKey}" not found]`;
-    }
+    if (!this.header) throw new Error('Checkpoint not loaded');
 
     const dtype = STORAGE_DTYPE[ref.storageType] || 'float32';
     const bytesPerElem = STORAGE_BYTES[ref.storageType] || 4;
     const totalElements = ref.shape.reduce((a, b) => a * b, 1) || 1;
     const byteLen = totalElements * bytesPerElem;
+    const byteOffset = ref.storageOffset * bytesPerElem;
 
-    // Ensure buffer is large enough
+    let storageBuf: Buffer;
+    try {
+      storageBuf = readPyTorchStorage(this.filePath, this.header, ref.storageKey, byteOffset, byteLen);
+    } catch (err) {
+      return `[Tensor storage "${ref.storageKey}" not found: ${err instanceof Error ? err.message : 'unknown error'}]`;
+    }
+
     if (storageBuf.length < byteLen) {
       return `[Storage too small: ${storageBuf.length} < ${byteLen}]`;
     }
@@ -209,7 +218,7 @@ export class PyTorchService {
   }
 
   private buildTree(): void {
-    if (!this.checkpoint) return;
+    if (!this.header) return;
 
     const strType = { class: DTypeClass.String, charSet: 'UTF-8', strPad: 'null-terminated' };
 
@@ -217,9 +226,9 @@ export class PyTorchService {
       name: '', path: '/', kind: EntityKind.Group, children: [],
       attributes: [{ name: 'format', shape: null, type: strType }],
     };
-    this.root._attrValues = { format: `PyTorch checkpoint (${this.checkpoint.prefix})` };
+    this.root._attrValues = { format: `PyTorch checkpoint (${this.header.prefix})` };
 
-    this.buildNode('/', this.root, this.checkpoint.data);
+    this.buildNode('/', this.root, this.header.data);
     this.registerAll(this.root);
   }
 
