@@ -50,6 +50,10 @@ The original [vscode-h5web](https://github.com/silx-kit/vscode-h5web) transfers 
 
 ## Installation
 
+**From VS Code Marketplace (Recommended):**
+
+Install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=meijiahao.vscode-h5-viewer), or search **"H5 Viewer"** in the Extensions panel (`Ctrl+Shift+X`).
+
 **From GitHub Release:**
 1. Go to [Releases](https://github.com/NieeiM/H5-Viewer/releases)
 2. Download the `.vsix` file

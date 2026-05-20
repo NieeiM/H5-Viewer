@@ -50,6 +50,10 @@
 
 ## 安装
 
+**从 VS Code 插件市场安装（推荐）：**
+
+直接从 [VS Code 插件市场](https://marketplace.visualstudio.com/items?itemName=meijiahao.vscode-h5-viewer) 安装，或在扩展面板（`Ctrl+Shift+X`）中搜索 **"H5 Viewer"**。
+
 **从 GitHub Release 安装：**
 1. 前往 [Releases](https://github.com/NieeiM/H5-Viewer/releases)
 2. 下载 `.vsix` 文件
