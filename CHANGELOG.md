@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.2.1]
+
+- **PyTorch: Fix pickle scalar float decoding**
+  - Decode pickle `BINFLOAT` values as big-endian IEEE-754 doubles, matching the Python pickle protocol
+  - Fix incorrect optimizer hyperparameters in `.pt`, `.pth`, `.bin`, and `.pkl` checkpoint metadata, such as `args.lr`
+  - Add regression coverage for pickle scalar floats in PyTorch checkpoint fixtures
+
 ## [v2.2.0]
 
 - **PyTorch: On-demand lazy loading for large checkpoints**

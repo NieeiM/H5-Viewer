@@ -402,7 +402,7 @@ export function unpickle(buf: Buffer): unknown {
   function readUint16(): number { const v = buf.readUInt16LE(pos); pos += 2; return v; }
   function readInt32(): number { const v = buf.readInt32LE(pos); pos += 4; return v; }
   function readUint32(): number { const v = buf.readUInt32LE(pos); pos += 4; return v; }
-  function readFloat64(): number { const v = buf.readDoubleLE(pos); pos += 8; return v; }
+  function readPickleFloat64BE(): number { const v = buf.readDoubleBE(pos); pos += 8; return v; }
   function readLine(): string {
     let end = pos;
     while (end < buf.length && buf[end] !== 0x0a) end++;
@@ -462,7 +462,7 @@ export function unpickle(buf: Buffer): unknown {
 
       // Floats
       case OP.FLOAT: stack.push(parseFloat(readLine())); break;
-      case OP.BINFLOAT: stack.push(readFloat64()); break;
+      case OP.BINFLOAT: stack.push(readPickleFloat64BE()); break; // Pickle BINFLOAT is big-endian IEEE-754 double
 
       // Strings
       case OP.SHORT_BINSTRING: { const n = readUint8(); stack.push(read(n).toString('ascii')); break; }

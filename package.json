@@ -3,7 +3,7 @@
   "displayName": "H5 Viewer — HDF5 / PyTorch / SafeTensors / GGUF / MAT / NPY / Audio",
   "publisher": "meijiahao",
   "description": "Visualize scientific data, ML models, audio — HDF5, PyTorch, SafeTensors, GGUF, MAT, NPY, CNT, JSON",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "license": "GPL-3.0",
   "homepage": "https://github.com/NieeiM/H5-Viewer",
   "repository": {
@@ -57,6 +57,7 @@
     "build:app": "vite build",
     "build:extension": "esbuild ./extension/index.ts --bundle --outfile=out/main.js --external:vscode --external:h5wasm --external:h5wasm/node --loader:.so=file --format=esm --platform=node",
     "build:copy-h5wasm": "node scripts/copy-h5wasm.js",
+    "test:pytorch-parser": "esbuild test/pytorch-parser.test.ts --bundle --outfile=/tmp/h5-viewer-pytorch-parser.test.mjs --platform=node --format=esm --external:vscode && node --test /tmp/h5-viewer-pytorch-parser.test.mjs",
     "watch": "pnpm build:extension --sourcemap --watch",
     "lint": "pnpm \"/^lint:/\"",
     "lint:eslint": "eslint --max-warnings=0",

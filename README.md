@@ -26,6 +26,8 @@ Optimized for Remote SSH. No file transfer, no size limit.
 
 Format is auto-detected from file header (magic bytes), not just extension.
 
+> **v2.2.1:** Fixes PyTorch checkpoint metadata floats saved with pickle `BINFLOAT`, such as optimizer arguments (`args.lr`, `weight_decay`, `eps`, `betas`).
+
 ## Visualizations
 
 - **Line plots** — 1D datasets with error bars, auxiliary signals, CSV export

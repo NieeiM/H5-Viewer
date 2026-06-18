@@ -26,6 +26,8 @@
 
 格式通过文件头 magic bytes 自动检测，不仅仅依赖扩展名。
 
+> **v2.2.1：** 修复 PyTorch checkpoint 中 pickle `BINFLOAT` 元数据浮点数读取错误，例如优化器参数 `args.lr`、`weight_decay`、`eps`、`betas`。
+
 ## 可视化类型
 
 - **折线图** — 1D 数据集，支持误差棒、辅助信号、CSV 导出

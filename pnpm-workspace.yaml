@@ -19,3 +19,7 @@ savePrefix: ''
 
 # Check that `node_modules` is up to date before running scripts
 verifyDepsBeforeRun: 'error'
+
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
